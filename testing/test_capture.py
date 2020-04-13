@@ -21,7 +21,7 @@ from _pytest.config import ExitCode
 
 def StdCaptureFDBinary(
     out: bool = True, err: bool = True, in_: bool = True
-) -> MultiCapture:
+) -> MultiCapture[bytes]:
     return capture.MultiCapture(
         in_=capture.FDCaptureBinary(0) if in_ else None,
         out=capture.FDCaptureBinary(1) if out else None,
@@ -30,7 +30,9 @@ def StdCaptureFDBinary(
     )
 
 
-def StdCaptureFD(out: bool = True, err: bool = True, in_: bool = True) -> MultiCapture:
+def StdCaptureFD(
+    out: bool = True, err: bool = True, in_: bool = True
+) -> MultiCapture[str]:
     return capture.MultiCapture(
         in_=capture.FDCapture(0) if in_ else None,
         out=capture.FDCapture(1) if out else None,
@@ -39,7 +41,9 @@ def StdCaptureFD(out: bool = True, err: bool = True, in_: bool = True) -> MultiC
     )
 
 
-def StdCapture(out: bool = True, err: bool = True, in_: bool = True) -> MultiCapture:
+def StdCapture(
+    out: bool = True, err: bool = True, in_: bool = True
+) -> MultiCapture[str]:
     return capture.MultiCapture(
         in_=capture.SysCapture(0) if in_ else None,
         out=capture.SysCapture(1) if out else None,
@@ -48,7 +52,9 @@ def StdCapture(out: bool = True, err: bool = True, in_: bool = True) -> MultiCap
     )
 
 
-def TeeStdCapture(out: bool = True, err: bool = True, in_: bool = True) -> MultiCapture:
+def TeeStdCapture(
+    out: bool = True, err: bool = True, in_: bool = True
+) -> MultiCapture[str]:
     return capture.MultiCapture(
         in_=capture.SysCapture(0, tee=True) if in_ else None,
         out=capture.SysCapture(1, tee=True) if out else None,
@@ -1272,13 +1278,14 @@ def test_capsys_results_accessible_by_attribute(capsys):
 
 def test_fdcapture_tmpfile_remains_the_same() -> None:
     cap = StdCaptureFDBinary(out=False, err=True)
+    assert cap.err is not None
     try:
         cap.start_capturing()
-        capfile = cap.err.tmpfile
+        capfile = cap.err.tmpfile  # type: ignore[attr-defined]
         cap.readouterr()
     finally:
         cap.stop_capturing()
-    capfile2 = cap.err.tmpfile
+    capfile2 = cap.err.tmpfile  # type: ignore[attr-defined]
     assert capfile2 == capfile
 
 
