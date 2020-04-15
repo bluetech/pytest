@@ -325,19 +325,35 @@ class SysCaptureBinary:
         self._old.buffer.flush()
 
 
-class SysCapture(SysCaptureBinary):
-    EMPTY_BUFFER = ""  # type: ignore[assignment]
+class SysCapture:
+    EMPTY_BUFFER = ""
+
+    def __init__(self, fd: int, tmpfile=None, *, tee: bool = False) -> None:
+        self._cap = SysCaptureBinary(fd, tmpfile, tee=tee)
+
+    def __repr__(self) -> str:
+        return self._cap.repr(self.__class__.__name__)
+
+    def start(self):
+        self._cap.start()
 
     def snap(self):
-        res = self.tmpfile.getvalue()
-        self.tmpfile.seek(0)
-        self.tmpfile.truncate()
-        return res
+        # XXX use encoding of original stream
+        return self._cap.snap().decode("utf-8", errors="replace")
+
+    def done(self):
+        self._cap.done()
+
+    def suspend(self):
+        self._cap.suspend()
+
+    def resume(self):
+        self._cap.resume()
 
     def writeorg(self, data):
-        self._assert_state("writeorg", ("started", "suspended"))
-        self._old.write(data)
-        self._old.flush()
+        """ write to original file descriptor. """
+        # XXX use encoding of original stream
+        self._cap.writeorg(data.encode("utf-8"))
 
 
 class FDCaptureBinary:
@@ -388,14 +404,13 @@ class FDCaptureBinary:
 
         self._state = "initialized"
 
-    def __repr__(self):
+    def repr(self, class_name: str) -> str:
         return "<{} {} oldfd={} _state={!r} tmpfile={!r}>".format(
-            self.__class__.__name__,
-            self.targetfd,
-            self.targetfd_save,
-            self._state,
-            self.tmpfile,
+            class_name, self.targetfd, self.targetfd_save, self._state, self.tmpfile,
         )
+
+    def __repr__(self) -> str:
+        return self.repr(self.__class__.__name__)
 
     def _assert_state(self, op: str, states: Tuple[str, ...]) -> None:
         assert (
@@ -457,26 +472,42 @@ class FDCaptureBinary:
         os.write(self.targetfd_save, data)
 
 
-class FDCapture(FDCaptureBinary):
+class FDCapture:
     """Capture IO to/from a given os-level filedescriptor.
 
     snap() produces text
     """
 
-    # Ignore type because it doesn't match the type in the superclass (bytes).
-    EMPTY_BUFFER = ""  # type: ignore
+    EMPTY_BUFFER = ""
+
+    def __init__(self, targetfd: int) -> None:
+        self._cap = FDCaptureBinary(targetfd)
+
+    def __repr__(self) -> str:
+        return self._cap.repr(self.__class__.__name__)
+
+    def start(self):
+        """ Start capturing on targetfd using memorized tmpfile. """
+        self._cap.start()
 
     def snap(self):
         self._assert_state("snap", ("started", "suspended"))
-        self.tmpfile.seek(0)
-        res = self.tmpfile.read()
-        self.tmpfile.seek(0)
-        self.tmpfile.truncate()
-        return res
+        # XXX use encoding of original stream
+        return self._cap.snap().decode("utf-8", errors="replace")
+
+    def done(self):
+        self._cap.done()
+
+    def suspend(self):
+        self._cap.suspend()
+
+    def resume(self):
+        self._cap.resume()
 
     def writeorg(self, data):
         """ write to original file descriptor. """
-        super().writeorg(data.encode("utf-8"))  # XXX use encoding of original stream
+        # XXX use encoding of original stream
+        self._cap.writeorg(data.encode("utf-8"))
 
 
 # MultiCapture

@@ -19,6 +19,16 @@ from _pytest.config import ExitCode
 # pylib 1.4.20.dev2 (rev 13d9af95547e)
 
 
+def StdCaptureFDBinary(
+    out: bool = True, err: bool = True, in_: bool = True
+) -> MultiCapture:
+    return capture.MultiCapture(
+        in_=capture.FDCaptureBinary(0) if in_ else None,
+        out=capture.FDCaptureBinary(1) if out else None,
+        err=capture.FDCaptureBinary(2) if err else None,
+    )
+
+
 def StdCaptureFD(out: bool = True, err: bool = True, in_: bool = True) -> MultiCapture:
     return capture.MultiCapture(
         in_=capture.FDCapture(0) if in_ else None,
@@ -955,13 +965,13 @@ class TestFDCapture:
 
             assert repr(cap) == (
                 "<FDCapture 1 oldfd={} _state='done' tmpfile={!r}>".format(
-                    cap.targetfd_save, cap.tmpfile
+                    cap._cap.targetfd_save, cap._cap.tmpfile
                 )
             )
             # Should not crash with missing "_old".
-            assert repr(cap.syscapture) == (
+            assert repr(cap._cap.syscapture) == (
                 "<SysCapture stdout _old=<UNSET> _state='done' tmpfile={!r}>".format(
-                    cap.syscapture.tmpfile
+                    cap._cap.syscapture.tmpfile
                 )
             )
 
@@ -1256,7 +1266,7 @@ def test_capsys_results_accessible_by_attribute(capsys):
 
 
 def test_fdcapture_tmpfile_remains_the_same() -> None:
-    cap = StdCaptureFD(out=False, err=True)
+    cap = StdCaptureFDBinary(out=False, err=True)
     try:
         cap.start_capturing()
         capfile = cap.err.tmpfile
