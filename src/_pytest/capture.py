@@ -366,42 +366,6 @@ class FDCaptureBinary:
 
     def __init__(self, targetfd):
         self.targetfd = targetfd
-
-        try:
-            os.fstat(targetfd)
-        except OSError:
-            # FD capturing is conceptually simple -- create a temporary file,
-            # redirect the FD to it, redirect back when done. But when the
-            # target FD is invalid it throws a wrench into this loveley scheme.
-            #
-            # Tests themselves shouldn't care if the FD is valid, FD capturing
-            # should work regardless of external circumstances. So falling back
-            # to just sys capturing is not a good option.
-            #
-            # Further complications are the need to support suspend() and the
-            # possibility of FD reuse (e.g. the tmpfile getting the very same
-            # target FD). The following approach is robust, I believe.
-            self.targetfd_invalid = os.open(os.devnull, os.O_RDWR)
-            os.dup2(self.targetfd_invalid, targetfd)
-        else:
-            self.targetfd_invalid = None
-        self.targetfd_save = os.dup(targetfd)
-
-        if targetfd == 0:
-            self.tmpfile = open(os.devnull)
-            self.syscapture = SysCapture(targetfd)
-        else:
-            self.tmpfile = EncodedFile(
-                TemporaryFile(buffering=0),
-                encoding="utf-8",
-                errors="replace",
-                write_through=True,
-            )
-            if targetfd in patchsysdict:
-                self.syscapture = SysCapture(targetfd, self.tmpfile)
-            else:
-                self.syscapture = NoCapture()
-
         self._state = "initialized"
 
     def repr(self, class_name: str) -> str:
@@ -422,6 +386,42 @@ class FDCaptureBinary:
     def start(self):
         """ Start capturing on targetfd using memorized tmpfile. """
         self._assert_state("start", ("initialized",))
+
+        try:
+            os.fstat(self.targetfd)
+        except OSError:
+            # FD capturing is conceptually simple -- create a temporary file,
+            # redirect the FD to it, redirect back when done. But when the
+            # target FD is invalid it throws a wrench into this loveley scheme.
+            #
+            # Tests themselves shouldn't care if the FD is valid, FD capturing
+            # should work regardless of external circumstances. So falling back
+            # to just sys capturing is not a good option.
+            #
+            # Further complications are the need to support suspend() and the
+            # possibility of FD reuse (e.g. the tmpfile getting the very same
+            # target FD). The following approach is robust, I believe.
+            self.targetfd_invalid = os.open(os.devnull, os.O_RDWR)
+            os.dup2(self.targetfd_invalid, self.targetfd)
+        else:
+            self.targetfd_invalid = None
+        self.targetfd_save = os.dup(self.targetfd)
+
+        if self.targetfd == 0:
+            self.tmpfile = open(os.devnull)
+            self.syscapture = SysCapture(self.targetfd)
+        else:
+            self.tmpfile = EncodedFile(
+                TemporaryFile(buffering=0),
+                encoding="utf-8",
+                errors="replace",
+                write_through=True,
+            )
+            if self.targetfd in patchsysdict:
+                self.syscapture = SysCapture(self.targetfd, self.tmpfile)
+            else:
+                self.syscapture = NoCapture()
+
         os.dup2(self.tmpfile.fileno(), self.targetfd)
         self.syscapture.start()
         self._state = "started"
@@ -440,14 +440,15 @@ class FDCaptureBinary:
         self._assert_state("done", ("initialized", "started", "suspended", "done"))
         if self._state == "done":
             return
-        os.dup2(self.targetfd_save, self.targetfd)
-        os.close(self.targetfd_save)
-        if self.targetfd_invalid is not None:
-            if self.targetfd_invalid != self.targetfd:
-                os.close(self.targetfd)
-            os.close(self.targetfd_invalid)
-        self.syscapture.done()
-        self.tmpfile.close()
+        if self._state != "initialized":
+            os.dup2(self.targetfd_save, self.targetfd)
+            os.close(self.targetfd_save)
+            if self.targetfd_invalid is not None:
+                if self.targetfd_invalid != self.targetfd:
+                    os.close(self.targetfd)
+                os.close(self.targetfd_invalid)
+            self.syscapture.done()
+            self.tmpfile.close()
         self._state = "done"
 
     def suspend(self):
@@ -791,26 +792,21 @@ class CaptureFixture:
     """
 
     def __init__(self, captureclass, request):
-        self.captureclass = captureclass
         self.request = request
-        self._capture = None
-        self._captured_out = self.captureclass.EMPTY_BUFFER
-        self._captured_err = self.captureclass.EMPTY_BUFFER
+        self._capture = MultiCapture(
+            in_=None, out=captureclass(1), err=captureclass(2),
+        )
+        self._captured_out = captureclass.EMPTY_BUFFER
+        self._captured_err = captureclass.EMPTY_BUFFER
 
     def _start(self):
-        if self._capture is None:
-            self._capture = MultiCapture(
-                in_=None, out=self.captureclass(1), err=self.captureclass(2),
-            )
-            self._capture.start_capturing()
+        self._capture.start_capturing()
 
     def close(self):
-        if self._capture is not None:
-            out, err = self._capture.pop_outerr_to_orig()
-            self._captured_out += out
-            self._captured_err += err
-            self._capture.stop_capturing()
-            self._capture = None
+        out, err = self._capture.pop_outerr_to_orig()
+        self._captured_out += out
+        self._captured_err += err
+        self._capture.stop_capturing()
 
     def readouterr(self):
         """Read and return the captured output so far, resetting the internal buffer.
@@ -818,27 +814,24 @@ class CaptureFixture:
         :return: captured content as a namedtuple with ``out`` and ``err`` string attributes
         """
         captured_out, captured_err = self._captured_out, self._captured_err
-        if self._capture is not None:
-            out, err = self._capture.readouterr()
-            captured_out += out
-            captured_err += err
-        self._captured_out = self.captureclass.EMPTY_BUFFER
-        self._captured_err = self.captureclass.EMPTY_BUFFER
+        out, err = self._capture.readouterr()
+        captured_out += out
+        captured_err += err
+        self._captured_out = self._capture.out.EMPTY_BUFFER
+        self._captured_err = self._capture.err.EMPTY_BUFFER
         return CaptureResult(captured_out, captured_err)
 
     def _suspend(self, *, pop_to_orig: bool = False) -> None:
         """Suspends this fixture's own capturing temporarily."""
-        if self._capture is not None:
-            if pop_to_orig:
-                out, err = self._capture.pop_outerr_to_orig()
-                self._captured_out += out
-                self._captured_err += err
-            self._capture.suspend_capturing()
+        if pop_to_orig:
+            out, err = self._capture.pop_outerr_to_orig()
+            self._captured_out += out
+            self._captured_err += err
+        self._capture.suspend_capturing()
 
     def _resume(self):
         """Resumes this fixture's own capturing temporarily."""
-        if self._capture is not None:
-            self._capture.resume_capturing()
+        self._capture.resume_capturing()
 
     @contextlib.contextmanager
     def disabled(self):
