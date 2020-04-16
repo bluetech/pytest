@@ -26,6 +26,7 @@ def StdCaptureFDBinary(
         in_=capture.FDCaptureBinary(0) if in_ else None,
         out=capture.FDCaptureBinary(1) if out else None,
         err=capture.FDCaptureBinary(2) if err else None,
+        initial=b"",
     )
 
 
@@ -34,6 +35,7 @@ def StdCaptureFD(out: bool = True, err: bool = True, in_: bool = True) -> MultiC
         in_=capture.FDCapture(0) if in_ else None,
         out=capture.FDCapture(1) if out else None,
         err=capture.FDCapture(2) if err else None,
+        initial="",
     )
 
 
@@ -42,6 +44,7 @@ def StdCapture(out: bool = True, err: bool = True, in_: bool = True) -> MultiCap
         in_=capture.SysCapture(0) if in_ else None,
         out=capture.SysCapture(1) if out else None,
         err=capture.SysCapture(2) if err else None,
+        initial="",
     )
 
 
@@ -50,6 +53,7 @@ def TeeStdCapture(out: bool = True, err: bool = True, in_: bool = True) -> Multi
         in_=capture.SysCapture(0, tee=True) if in_ else None,
         out=capture.SysCapture(1, tee=True) if out else None,
         err=capture.SysCapture(2, tee=True) if err else None,
+        initial="",
     )
 
 
@@ -1180,6 +1184,7 @@ class TestStdCaptureFDinvalidFD:
                     in_=capture.FDCapture(0) if in_ else None,
                     out=capture.FDCapture(1) if out else None,
                     err=capture.FDCapture(2) if err else None,
+                    initial="",
                 )
 
             def test_stdout():
@@ -1313,6 +1318,7 @@ def test_capturing_and_logging_fundamentals(testdir, method: str) -> None:
             in_=None,
             out=None,
             err=capture.%s,
+            initial="",
         )
         cap.start_capturing()
 

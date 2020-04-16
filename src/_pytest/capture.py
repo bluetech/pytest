@@ -239,14 +239,10 @@ patchsysdict = {0: "stdin", 1: "stdout", 2: "stderr"}
 
 
 class NoCapture:
-    EMPTY_BUFFER = None
     __init__ = start = done = suspend = resume = lambda *args: None
 
 
 class SysCaptureBinary:
-
-    EMPTY_BUFFER = b""
-
     def __init__(self, fd, tmpfile=None, *, tee=False):
         name = patchsysdict[fd]
         self._old = getattr(sys, name)
@@ -326,8 +322,6 @@ class SysCaptureBinary:
 
 
 class SysCapture:
-    EMPTY_BUFFER = ""
-
     def __init__(self, fd: int, tmpfile=None, *, tee: bool = False) -> None:
         self._cap = SysCaptureBinary(fd, tmpfile, tee=tee)
 
@@ -361,8 +355,6 @@ class FDCaptureBinary:
 
     snap() produces `bytes`
     """
-
-    EMPTY_BUFFER = b""
 
     def __init__(self, targetfd):
         self.targetfd = targetfd
@@ -479,8 +471,6 @@ class FDCapture:
     snap() produces text
     """
 
-    EMPTY_BUFFER = ""
-
     def __init__(self, targetfd: int) -> None:
         self._cap = FDCaptureBinary(targetfd)
 
@@ -520,10 +510,11 @@ class MultiCapture:
     _state = None
     _in_suspended = False
 
-    def __init__(self, in_, out, err) -> None:
+    def __init__(self, in_, out, err, initial) -> None:
         self.in_ = in_
         self.out = out
         self.err = err
+        self.initial = initial
 
     def __repr__(self):
         return "<MultiCapture out={!r} err={!r} in_={!r} _state={!r} _in_suspended={!r}>".format(
@@ -584,24 +575,31 @@ class MultiCapture:
         if self.out:
             out = self.out.snap()
         else:
-            out = ""
+            out = self.initial
         if self.err:
             err = self.err.snap()
         else:
-            err = ""
+            err = self.initial
         return CaptureResult(out, err)
 
 
 def _get_multicapture(method: "_CaptureMethod") -> MultiCapture:
     if method == "fd":
-        return MultiCapture(in_=FDCapture(0), out=FDCapture(1), err=FDCapture(2))
+        return MultiCapture(
+            in_=FDCapture(0), out=FDCapture(1), err=FDCapture(2), initial=""
+        )
     elif method == "sys":
-        return MultiCapture(in_=SysCapture(0), out=SysCapture(1), err=SysCapture(2))
+        return MultiCapture(
+            in_=SysCapture(0), out=SysCapture(1), err=SysCapture(2), initial=""
+        )
     elif method == "no":
-        return MultiCapture(in_=None, out=None, err=None)
+        return MultiCapture(in_=None, out=None, err=None, initial="")
     elif method == "tee-sys":
         return MultiCapture(
-            in_=None, out=SysCapture(1, tee=True), err=SysCapture(2, tee=True)
+            in_=None,
+            out=SysCapture(1, tee=True),
+            err=SysCapture(2, tee=True),
+            initial="",
         )
     raise ValueError("unknown capturing method: {!r}".format(method))
 
@@ -791,13 +789,10 @@ class CaptureFixture:
     fixtures.
     """
 
-    def __init__(self, captureclass, request):
+    def __init__(self, capture, request):
         self.request = request
-        self._capture = MultiCapture(
-            in_=None, out=captureclass(1), err=captureclass(2),
-        )
-        self._captured_out = captureclass.EMPTY_BUFFER
-        self._captured_err = captureclass.EMPTY_BUFFER
+        self._capture = capture
+        self._captured_out, self._captured_err = capture.readouterr()
 
     def _start(self):
         self._capture.start_capturing()
@@ -817,8 +812,7 @@ class CaptureFixture:
         out, err = self._capture.readouterr()
         captured_out += out
         captured_err += err
-        self._captured_out = self._capture.out.EMPTY_BUFFER
-        self._captured_err = self._capture.err.EMPTY_BUFFER
+        self._captured_out, self._captured_out = self._capture.readouterr()
         return CaptureResult(captured_out, captured_err)
 
     def _suspend(self, *, pop_to_orig: bool = False) -> None:
@@ -853,7 +847,8 @@ def capsys(request):
     ``out`` and ``err`` will be ``text`` objects.
     """
     capman = request.config.pluginmanager.getplugin("capturemanager")
-    capture_fixture = CaptureFixture(SysCapture, request)
+    capture = MultiCapture(in_=None, out=SysCapture(1), err=SysCapture(2), initial="")
+    capture_fixture = CaptureFixture(capture, request)
     capman.set_fixture(capture_fixture)
     capture_fixture._start()
     yield capture_fixture
@@ -870,7 +865,10 @@ def capsysbinary(request):
     ``out`` and ``err`` will be ``bytes`` objects.
     """
     capman = request.config.pluginmanager.getplugin("capturemanager")
-    capture_fixture = CaptureFixture(SysCaptureBinary, request)
+    capture = MultiCapture(
+        in_=None, out=SysCaptureBinary(1), err=SysCaptureBinary(2), initial=b""
+    )
+    capture_fixture = CaptureFixture(capture, request)
     capman.set_fixture(capture_fixture)
     capture_fixture._start()
     yield capture_fixture
@@ -887,7 +885,8 @@ def capfd(request):
     ``out`` and ``err`` will be ``text`` objects.
     """
     capman = request.config.pluginmanager.getplugin("capturemanager")
-    capture_fixture = CaptureFixture(FDCapture, request)
+    capture = MultiCapture(in_=None, out=FDCapture(1), err=FDCapture(2), initial="")
+    capture_fixture = CaptureFixture(capture, request)
     capman.set_fixture(capture_fixture)
     capture_fixture._start()
     yield capture_fixture
@@ -904,7 +903,10 @@ def capfdbinary(request):
     ``out`` and ``err`` will be ``byte`` objects.
     """
     capman = request.config.pluginmanager.getplugin("capturemanager")
-    capture_fixture = CaptureFixture(FDCaptureBinary, request)
+    capture = MultiCapture(
+        in_=None, out=FDCaptureBinary(1), err=FDCaptureBinary(2), initial=b""
+    )
+    capture_fixture = CaptureFixture(capture, request)
     capman.set_fixture(capture_fixture)
     capture_fixture._start()
     yield capture_fixture
