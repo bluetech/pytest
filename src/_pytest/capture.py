@@ -239,7 +239,23 @@ patchsysdict = {0: "stdin", 1: "stdout", 2: "stderr"}
 
 
 class NoCapture:
-    __init__ = start = done = suspend = resume = lambda *args: None
+    def start(self):
+        pass
+
+    def done(self):
+        pass
+
+    def snap(self):
+        raise UnsupportedOperation("cannot capture this file")
+
+    def suspend(self):
+        pass
+
+    def resume(self):
+        pass
+
+    def writeorg(self, data):
+        pass
 
 
 class SysCaptureBinary:
