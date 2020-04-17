@@ -757,6 +757,8 @@ class CaptureManager:
     @pytest.hookimpl(hookwrapper=True)
     def pytest_runtest_setup(self, item):
         with self.item_capture("setup", item):
+            # If a capture fixture is requested, self._capture_fixture
+            # will be created and started during the yield.
             yield
 
     @pytest.hookimpl(hookwrapper=True)
@@ -768,6 +770,8 @@ class CaptureManager:
     def pytest_runtest_teardown(self, item):
         with self.item_capture("teardown", item):
             yield
+            # If a capture fixture was requested, self._capture_fixture
+            # was stopped and destroyed during the yield.
 
     @pytest.hookimpl(tryfirst=True)
     def pytest_keyboard_interrupt(self, excinfo):
