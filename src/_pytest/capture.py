@@ -704,9 +704,9 @@ class CaptureManager:
         if self._capture_fixture:
             self._capture_fixture.close()
 
-    def suspend_fixture(self):
+    def suspend_fixture(self, pop_to_orig=False):
         if self._capture_fixture:
-            self._capture_fixture._suspend()
+            self._capture_fixture._suspend(pop_to_orig=pop_to_orig)
 
     def resume_fixture(self):
         if self._capture_fixture:
@@ -726,11 +726,11 @@ class CaptureManager:
     @contextlib.contextmanager
     def item_capture(self, when, item):
         self.resume_global_capture()
-        self.activate_fixture()
+        self.resume_fixture()
         try:
             yield
         finally:
-            self.deactivate_fixture()
+            self.suspend_fixture(pop_to_orig=True)
             self.suspend_global_capture(in_=False)
 
         out, err = self.read_global_capture()
@@ -771,10 +771,12 @@ class CaptureManager:
 
     @pytest.hookimpl(tryfirst=True)
     def pytest_keyboard_interrupt(self, excinfo):
+        self.deactivate_fixture()
         self.stop_global_capturing()
 
     @pytest.hookimpl(tryfirst=True)
     def pytest_internalerror(self, excinfo):
+        self.deactivate_fixture()
         self.stop_global_capturing()
 
 
@@ -820,9 +822,13 @@ class CaptureFixture:
         self._captured_err = self.captureclass.EMPTY_BUFFER
         return CaptureResult(captured_out, captured_err)
 
-    def _suspend(self):
+    def _suspend(self, *, pop_to_orig: bool = False) -> None:
         """Suspends this fixture's own capturing temporarily."""
         if self._capture is not None:
+            if pop_to_orig:
+                out, err = self._capture.pop_outerr_to_orig()
+                self._captured_out += out
+                self._captured_err += err
             self._capture.suspend_capturing()
 
     def _resume(self):
