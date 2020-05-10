@@ -6,6 +6,7 @@ import os
 import sys
 import textwrap
 from io import StringIO
+from types import SimpleNamespace
 from typing import cast
 from typing import Dict
 from typing import List
@@ -23,9 +24,12 @@ from _pytest.config import ExitCode
 from _pytest.pytester import Testdir
 from _pytest.reports import BaseReport
 from _pytest.reports import CollectReport
+from _pytest.reports import TestReport
 from _pytest.terminal import _folded_skips
 from _pytest.terminal import _get_line_with_reprcrash_message
+from _pytest.terminal import _get_raw_skip_reason
 from _pytest.terminal import _plugin_nameversions
+from _pytest.terminal import _trim_message
 from _pytest.terminal import getreportopt
 from _pytest.terminal import TerminalReporter
 
@@ -332,6 +336,28 @@ class TestTerminal:
         result = testdir.runpytest("-v")
         result.stdout.fnmatch_lines(
             color_mapping.format_for_fnmatch(["*{red}FOO{reset}*"])
+        )
+
+    def test_verbose_skip_reason(self, testdir: Testdir) -> None:
+        testdir.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.skip(reason="123")
+            def test_1():
+                pass
+
+            @pytest.mark.xfail(reason="456")
+            def test_2():
+                pass
+        """
+        )
+        result = testdir.runpytest("-v")
+        result.stdout.fnmatch_lines(
+            [
+                "test_verbose_skip_reason.py::test_1 SKIPPED (123)*",
+                "test_verbose_skip_reason.py::test_2 XPASS*",
+            ]
         )
 
 
@@ -2253,3 +2279,19 @@ class TestCodeHighlight:
                 ]
             )
         )
+
+
+def test_raw_skip_reason() -> None:
+    report = SimpleNamespace()
+    report.skipped = True
+    report.longrepr = ("xyz", 3, "Skipped: Just so")
+
+    reason = _get_raw_skip_reason(cast(TestReport, report))
+    assert reason == "Just so"
+
+
+def test_trim_message() -> None:
+    msg = "unconditional skip"
+
+    assert _trim_message(" ({}) ", msg, len(msg) + 4) == " (unconditional skip) "
+    assert _trim_message(" ({}) ", msg, len(msg) + 3) == " (unconditional ...) "

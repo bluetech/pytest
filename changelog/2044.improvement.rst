@@ -1,0 +1,1 @@
+Verbose mode now shows the reason for a skipped text next to the "SKIPPED" string in the terminal.
