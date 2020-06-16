@@ -220,8 +220,6 @@ def pytest_pycollect_makeitem(collector: "PyCollector", name: str, obj):
         if collector.istestclass(obj, name):
             outcome.force_result(Class.from_parent(collector, name=name, obj=obj))
     elif collector.istestfunction(obj, name):
-        # mock seems to store unbound methods (issue473), normalize it
-        obj = getattr(obj, "__func__", obj)
         # We need to try and unwrap the function if it's a functools.partial
         # or a functools.wrapped.
         # We mustn't if it's been wrapped with mock.patch (python 2 only)
