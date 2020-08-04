@@ -1,9 +1,7 @@
-# part of our release process, see `release-on-comment.py`
-name: release on comment
+# part of our backport process, see `backport-on-comment.py`
+name: backport on comment
 
 on:
-  issues:
-    types: [opened, edited]
   issue_comment:
     types: [created, edited]
 
@@ -11,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    if: (github.event.comment && startsWith(github.event.comment.body, '@pytestbot please prepare')) || (github.event.issue && !github.event.comment && startsWith(github.event.issue.body, '@pytestbot please prepare'))
+    if: github.event.pull_request && github.event.comment && startsWith(github.event.comment.body, '@pytestbot please backport')
 
     steps:
     - uses: actions/checkout@v2
@@ -28,4 +26,4 @@ jobs:
         pip install --upgrade setuptools tox
     - name: Prepare release
       run: |
-        tox -e release-on-comment -- $GITHUB_EVENT_PATH ${{ secrets.chatops }}
+        tox -e backport-on-comment -- $GITHUB_EVENT_PATH ${{ secrets.chatops }}
