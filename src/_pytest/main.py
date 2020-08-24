@@ -410,16 +410,6 @@ class Failed(Exception):
     """Signals a stop as failed test run."""
 
 
-@attr.s
-class _bestrelpath_cache(Dict[py.path.local, str]):
-    path = attr.ib(type=py.path.local)
-
-    def __missing__(self, path: py.path.local) -> str:
-        r = self.path.bestrelpath(path)  # type: str
-        self[path] = r
-        return r
-
-
 class Session(nodes.FSCollector):
     Interrupted = Interrupted
     Failed = Failed
@@ -430,8 +420,8 @@ class Session(nodes.FSCollector):
     exitstatus = None  # type: Union[int, ExitCode]
 
     def __init__(self, config: Config) -> None:
-        nodes.FSCollector.__init__(
-            self, config.rootdir, parent=None, config=config, session=self, nodeid=""
+        super().__init__(
+            config.rootdir, parent=None, config=config, session=self, nodeid=""
         )
         self.testsfailed = 0
         self.testscollected = 0
@@ -440,10 +430,6 @@ class Session(nodes.FSCollector):
         self.trace = config.trace.root.get("collection")
         self.startdir = config.invocation_dir
         self._initialpaths = frozenset()  # type: FrozenSet[py.path.local]
-
-        self._bestrelpathcache = _bestrelpath_cache(
-            config.rootdir
-        )  # type: Dict[py.path.local, str]
 
         self.config.pluginmanager.register(self, name="session")
 
@@ -460,10 +446,6 @@ class Session(nodes.FSCollector):
             self.testsfailed,
             self.testscollected,
         )
-
-    def _node_location_to_relpath(self, node_path: py.path.local) -> str:
-        # bestrelpath is a quite slow function.
-        return self._bestrelpathcache[node_path]
 
     @hookimpl(tryfirst=True)
     def pytest_collectstart(self) -> None:

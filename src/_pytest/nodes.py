@@ -32,6 +32,7 @@ from _pytest.mark.structures import MarkDecorator
 from _pytest.mark.structures import NodeKeywords
 from _pytest.outcomes import fail
 from _pytest.pathlib import Path
+from _pytest.pathlib import bestrelpath
 from _pytest.store import Store
 
 if TYPE_CHECKING:
@@ -594,10 +595,7 @@ class Item(Node):
     @cached_property
     def location(self) -> Tuple[str, Optional[int], str]:
         location = self.reportinfo()
-        if isinstance(location[0], py.path.local):
-            fspath = location[0]
-        else:
-            fspath = py.path.local(location[0])
-        relfspath = self.session._node_location_to_relpath(fspath)
+        fspath = Path(str(location[0]))
+        relfspath = bestrelpath(self.config.rootpath, fspath)
         assert type(location[2]) is str
         return (relfspath, location[1], location[2])

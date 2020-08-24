@@ -1012,6 +1012,7 @@ class Config:
             config=self,
         )
         self.rootdir = py.path.local(str(rootpath))
+        self.rootpath = rootpath
         self.inifile = py.path.local(str(inipath)) if inipath else None
         self.inicfg = inicfg
         self._parser.extra_info["rootdir"] = self.rootdir
