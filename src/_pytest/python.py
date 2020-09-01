@@ -10,6 +10,7 @@ import typing
 import warnings
 from collections import Counter
 from collections import defaultdict
+from collections import deque
 from collections.abc import Sequence
 from functools import partial
 from typing import Any
@@ -67,7 +68,6 @@ from _pytest.outcomes import skip
 from _pytest.pathlib import import_path
 from _pytest.pathlib import ImportPathMismatchError
 from _pytest.pathlib import parts
-from _pytest.pathlib import visit
 from _pytest.warning_types import PytestCollectionWarning
 from _pytest.warning_types import PytestUnhandledCoroutineWarning
 
@@ -652,18 +652,6 @@ class Package(Module):
         warnings.warn(FSCOLLECTOR_GETHOOKPROXY_ISINITPATH, stacklevel=2)
         return self.session.isinitpath(path)
 
-    def _recurse(self, direntry: "os.DirEntry[str]") -> bool:
-        if direntry.name == "__pycache__":
-            return False
-        path = py.path.local(direntry.path)
-        ihook = self.session.gethookproxy(path.dirpath())
-        if ihook.pytest_ignore_collect(path=path, config=self.config):
-            return False
-        norecursepatterns = self.config.getini("norecursedirs")
-        if any(path.check(fnmatch=pat) for pat in norecursepatterns):
-            return False
-        return True
-
     def _collectfile(
         self, path: py.path.local, handle_dupes: bool = True
     ) -> typing.Sequence[nodes.Collector]:
@@ -695,29 +683,41 @@ class Package(Module):
             init_module, self.config.getini("python_files")
         ):
             yield Module.from_parent(self, fspath=init_module)
-        pkg_prefixes = set()  # type: Set[py.path.local]
-        for direntry in visit(str(this_path), recurse=self._recurse):
-            path = py.path.local(direntry.path)
 
-            # We will visit our own __init__.py file, in which case we skip it.
-            if direntry.is_file():
-                if direntry.name == "__init__.py" and path.dirpath() == this_path:
+        norecursepatterns = self.config.getini("norecursedirs")
+        pkg_prefixes = set()  # type: Set[py.path.local]
+        work = deque([this_path])
+        while work:
+            dirpath = work.popleft()
+            ihook = self.session.gethookproxy(dirpath)
+            for direntry in sorted(os.scandir(dirpath), key=lambda entry: entry.name):
+                path = py.path.local(direntry.path)
+
+                # We will visit our own __init__.py file, in which case we skip it.
+                if direntry.is_file() and path == init_module:
                     continue
 
-            parts_ = parts(direntry.path)
-            if any(
-                str(pkg_prefix) in parts_ and pkg_prefix.join("__init__.py") != path
-                for pkg_prefix in pkg_prefixes
-            ):
-                continue
+                parts_ = parts(direntry.path)
+                if any(
+                    str(pkg_prefix) in parts_ and pkg_prefix.join("__init__.py") != path
+                    for pkg_prefix in pkg_prefixes
+                ):
+                    continue
 
-            if direntry.is_file():
-                yield from self._collectfile(path)
-            elif not direntry.is_dir():
-                # Broken symlink or invalid/missing file.
-                continue
-            elif path.join("__init__.py").check(file=1):
-                pkg_prefixes.add(path)
+                if direntry.is_file():
+                    yield from self._collectfile(path)
+
+                if direntry.is_dir() and path.join("__init__.py").check(file=1):
+                    pkg_prefixes.add(path)
+
+                if direntry.is_dir(follow_symlinks=False):
+                    if direntry.name == "__pycache__":
+                        continue
+                    if ihook.pytest_ignore_collect(path=path, config=self.config):
+                        continue
+                    if any(path.check(fnmatch=pat) for pat in norecursepatterns):
+                        continue
+                    work.append(path)
 
 
 def _call_with_optional_argument(func, arg) -> None:
