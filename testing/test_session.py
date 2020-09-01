@@ -363,3 +363,43 @@ def test_rootdir_wrong_option_arg(testdir):
     result.stderr.fnmatch_lines(
         ["*Directory *wrong_dir* not found. Check your '--rootdir' option.*"]
     )
+
+
+def test_initial_args_dont_duplicate_fixtures_in_module(testdir):
+    """Regression test for #3358."""
+    testdir.makepyfile(
+        x=r"""
+        import pytest
+
+        @pytest.fixture(scope='module', autouse=True)
+        def _setup_module():
+            print('\nSETUP MODULE')
+
+        def test_1(): pass
+        def test_2(): pass
+        """
+    )
+    result = testdir.runpytest("-s", "-q", "x.py::test_1", "x.py::test_2")
+    assert result.stdout.str().count("SETUP MODULE") == 1
+
+
+def test_initial_args_dont_duplicate_fixtures_in_package(testdir):
+    """Regression test for #3358."""
+    testdir.makepyfile(
+        conftest=r"""
+        import pytest
+        @pytest.fixture(scope='package', autouse=True)
+        def _setup_package():
+            print('\nSETUP PACKAGE')
+        """,
+        __init__="",
+        test_a=r"""
+        def test_1(): pass
+        def test_2(): pass
+        """,
+        test_b=r"""
+        def test_3(): pass
+        """,
+    )
+    result = testdir.runpytest("-s", "-q", "test_a.py", "test_b.py")
+    assert result.stdout.str().count("SETUP PACKAGE") == 1
