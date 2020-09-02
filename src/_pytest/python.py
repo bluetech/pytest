@@ -10,7 +10,6 @@ import typing
 import warnings
 from collections import Counter
 from collections import defaultdict
-from collections import deque
 from collections.abc import Sequence
 from functools import partial
 from typing import Any
@@ -67,7 +66,6 @@ from _pytest.outcomes import fail
 from _pytest.outcomes import skip
 from _pytest.pathlib import import_path
 from _pytest.pathlib import ImportPathMismatchError
-from _pytest.pathlib import parts
 from _pytest.warning_types import PytestCollectionWarning
 from _pytest.warning_types import PytestUnhandledCoroutineWarning
 
@@ -684,40 +682,19 @@ class Package(Module):
         ):
             yield Module.from_parent(self, fspath=init_module)
 
-        norecursepatterns = self.config.getini("norecursedirs")
-        pkg_prefixes = set()  # type: Set[py.path.local]
-        work = deque([this_path])
-        while work:
-            dirpath = work.popleft()
-            ihook = self.session.gethookproxy(dirpath)
-            for direntry in sorted(os.scandir(dirpath), key=lambda entry: entry.name):
-                path = py.path.local(direntry.path)
+        for direntry in sorted(
+            os.scandir(str(this_path)), key=lambda entry: entry.name
+        ):
+            if not direntry.is_file():
+                continue
 
-                # We will visit our own __init__.py file, in which case we skip it.
-                if direntry.is_file() and path == init_module:
-                    continue
+            path = py.path.local(direntry.path)
 
-                parts_ = parts(direntry.path)
-                if any(
-                    str(pkg_prefix) in parts_ and pkg_prefix.join("__init__.py") != path
-                    for pkg_prefix in pkg_prefixes
-                ):
-                    continue
+            # We will visit our own __init__.py file, in which case we skip it.
+            if path == init_module:
+                continue
 
-                if direntry.is_file():
-                    yield from self._collectfile(path)
-
-                if direntry.is_dir() and path.join("__init__.py").check(file=1):
-                    pkg_prefixes.add(path)
-
-                if direntry.is_dir(follow_symlinks=False):
-                    if direntry.name == "__pycache__":
-                        continue
-                    if ihook.pytest_ignore_collect(path=path, config=self.config):
-                        continue
-                    if any(path.check(fnmatch=pat) for pat in norecursepatterns):
-                        continue
-                    work.append(path)
+            yield from self._collectfile(path)
 
 
 def _call_with_optional_argument(func, arg) -> None:
