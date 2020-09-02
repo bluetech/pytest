@@ -188,11 +188,16 @@ def pytest_collect_file(
 ) -> Optional["Module"]:
     ext = path.ext
     if ext == ".py":
-        if not parent.session.isinitpath(path):
-            if not path_matches_patterns(
-                path, parent.config.getini("python_files") + ["__init__.py"]
-            ):
-                return None
+        if (
+            # A path which is directly specified by the user is allowed.
+            not parent.session.isinitpath(path)
+            # A Package itself is allowed (the __init__.py Module can be filtered).
+            and not (path.basename == "__init__.py" and not isinstance(parent, Package))
+            # A path which matches the configured patterns is allowed.
+            and not path_matches_patterns(path, parent.config.getini("python_files"))
+        ):
+            return None
+
         ihook = parent.session.gethookproxy(path)
         module = ihook.pytest_pycollect_makemodule(
             path=path, parent=parent
@@ -206,8 +211,14 @@ def path_matches_patterns(path: py.path.local, patterns: Iterable[str]) -> bool:
     return any(path.fnmatch(pattern) for pattern in patterns)
 
 
-def pytest_pycollect_makemodule(path: py.path.local, parent) -> "Module":
-    if path.basename == "__init__.py":
+def pytest_pycollect_makemodule(
+    path: py.path.local, parent: nodes.Collector
+) -> "Module":
+    # An __init__.py reaches here twice: once from the parent directory
+    # of a package, in which case a Package is generated, and once from
+    # the Package directory itself, in which case a Module is generated
+    # (for when the __init__.py file itself contains tests).
+    if path.basename == "__init__.py" and not isinstance(parent, Package):
         pkg = Package.from_parent(parent, fspath=path)  # type: Package
         return pkg
     mod = Module.from_parent(parent, fspath=path)  # type: Module
@@ -675,23 +686,17 @@ class Package(Module):
         return ihook.pytest_collect_file(path=path, parent=self)  # type: ignore[no-any-return]
 
     def collect(self) -> Iterable[Union[nodes.Item, nodes.Collector]]:
-        # The package's __init__.py module (to which the Package's fspath points)
-        # can't be handled by the loop below since it will just create our own
-        # Package again (see default pytest_pycollect_makemodule impl above).
-        if path_matches_patterns(self.fspath, self.config.getini("python_files")):
-            yield Module.from_parent(self, fspath=self.fspath)
-
         package_dir = str(self.fspath.dirpath())
         direntries = sorted(os.scandir(package_dir), key=lambda entry: entry.name)
         for direntry in direntries:
             if not direntry.is_file():
                 continue
 
-            # The __init__.py file was already handled above.
-            if direntry.name == "__init__.py":
-                continue
+            # The __init__.py file was already collected once as this Package,
+            # collect it again as a Module (see pytest_pycollect_makemodule).
+            handle_dupes = direntry.name != "__init__.py"
 
-            yield from self._collectfile(py.path.local(direntry.path))
+            yield from self._collectfile(py.path.local(direntry.path), handle_dupes)
 
 
 def _call_with_optional_argument(func, arg) -> None:
