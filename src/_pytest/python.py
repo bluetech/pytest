@@ -675,26 +675,23 @@ class Package(Module):
         return ihook.pytest_collect_file(path=path, parent=self)  # type: ignore[no-any-return]
 
     def collect(self) -> Iterable[Union[nodes.Item, nodes.Collector]]:
-        this_path = self.fspath.dirpath()
-        init_module = this_path.join("__init__.py")
-        if init_module.check(file=1) and path_matches_patterns(
-            init_module, self.config.getini("python_files")
-        ):
-            yield Module.from_parent(self, fspath=init_module)
+        # The package's __init__.py module (to which the Package's fspath points)
+        # can't be handled by the loop below since it will just create our own
+        # Package again (see default pytest_pycollect_makemodule impl above).
+        if path_matches_patterns(self.fspath, self.config.getini("python_files")):
+            yield Module.from_parent(self, fspath=self.fspath)
 
-        for direntry in sorted(
-            os.scandir(str(this_path)), key=lambda entry: entry.name
-        ):
+        package_dir = str(self.fspath.dirpath())
+        direntries = sorted(os.scandir(package_dir), key=lambda entry: entry.name)
+        for direntry in direntries:
             if not direntry.is_file():
                 continue
 
-            path = py.path.local(direntry.path)
-
-            # We will visit our own __init__.py file, in which case we skip it.
-            if path == init_module:
+            # The __init__.py file was already handled above.
+            if direntry.name == "__init__.py":
                 continue
 
-            yield from self._collectfile(path)
+            yield from self._collectfile(py.path.local(direntry.path))
 
 
 def _call_with_optional_argument(func, arg) -> None:
