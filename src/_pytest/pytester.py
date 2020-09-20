@@ -21,8 +21,8 @@ from typing import Tuple
 from typing import Union
 from weakref import WeakKeyDictionary
 
+import iniconfig
 import py
-from iniconfig import IniConfig
 
 import pytest
 from _pytest import timing
@@ -749,10 +749,10 @@ class Testdir:
         """Write a tox.ini file with 'source' as contents."""
         return self.makefile(".ini", tox=source)
 
-    def getinicfg(self, source) -> IniConfig:
+    def getinicfg(self, source) -> iniconfig.SectionWrapper:
         """Return the pytest section from the tox.ini config file."""
         p = self.makeini(source)
-        return IniConfig(p)["pytest"]
+        return iniconfig.IniConfig(p)["pytest"]
 
     def makepyprojecttoml(self, source):
         """Write a pyproject.toml file with 'source' as contents.
