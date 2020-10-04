@@ -17,7 +17,6 @@ from typing import Generator
 from typing import Iterable
 from typing import Iterator
 from typing import List
-from typing import Mapping
 from typing import Optional
 from typing import Sequence
 from typing import Set
@@ -38,6 +37,7 @@ from _pytest._code.code import TerminalRepr
 from _pytest._io import TerminalWriter
 from _pytest._io.saferepr import saferepr
 from _pytest.compat import ascii_escaped
+from _pytest.compat import assert_never
 from _pytest.compat import final
 from _pytest.compat import get_default_arg_names
 from _pytest.compat import get_real_func
@@ -61,7 +61,6 @@ from _pytest.mark import MARK_GEN
 from _pytest.mark import ParameterSet
 from _pytest.mark.structures import get_unpacked_marks
 from _pytest.mark.structures import Mark
-from _pytest.mark.structures import MarkDecorator
 from _pytest.mark.structures import normalize_mark_list
 from _pytest.outcomes import fail
 from _pytest.outcomes import skip
@@ -876,16 +875,6 @@ class CallSpec2:
         self.marks = []  # type: List[Mark]
         self.indices = {}  # type: Dict[str, int]
 
-    def copy(self) -> "CallSpec2":
-        cs = CallSpec2(self.metafunc)
-        cs.funcargs.update(self.funcargs)
-        cs.params.update(self.params)
-        cs.marks.extend(self.marks)
-        cs.indices.update(self.indices)
-        cs._arg2scopenum.update(self._arg2scopenum)
-        cs._idlist = list(self._idlist)
-        return cs
-
     def _checkargnotcontained(self, arg: str) -> None:
         if arg in self.params or arg in self.funcargs:
             raise ValueError("duplicate {!r}".format(arg))
@@ -899,30 +888,6 @@ class CallSpec2:
     @property
     def id(self) -> str:
         return "-".join(map(str, self._idlist))
-
-    def setmulti2(
-        self,
-        valtypes: Mapping[str, "Literal['params', 'funcargs']"],
-        argnames: Sequence[str],
-        valset: Iterable[object],
-        id: str,
-        marks: Iterable[Union[Mark, MarkDecorator]],
-        scopenum: int,
-        param_index: int,
-    ) -> None:
-        for arg, val in zip(argnames, valset):
-            self._checkargnotcontained(arg)
-            valtype_for_arg = valtypes[arg]
-            if valtype_for_arg == "params":
-                self.params[arg] = val
-            elif valtype_for_arg == "funcargs":
-                self.funcargs[arg] = val
-            else:  # pragma: no cover
-                assert False, "Unhandled valtype for arg: {}".format(valtype_for_arg)
-            self.indices[arg] = param_index
-            self._arg2scopenum[arg] = scopenum
-        self._idlist.append(id)
-        self.marks.extend(normalize_mark_list(marks))
 
 
 @final
@@ -1047,11 +1012,85 @@ class Metafunc:
             )
 
         if scope is None:
-            scope = _find_parametrized_scope(argnames, self._arg2fixturedefs, indirect)
+            # Find the most appropriate scope for a parametrized call based on its arguments.
+            #
+            # When there's at least one direct argument, always use "function" scope.
+            #
+            # When a test function is parametrized and all its arguments are indirect
+            # (e.g. fixtures), return the most narrow scope based on the fixtures used.
+            #
+            # Related to issue #1832, based on code posted by @Kingdread.
+            if isinstance(indirect, Sequence):
+                all_arguments_are_fixtures = len(indirect) == len(argnames)
+            else:
+                all_arguments_are_fixtures = bool(indirect)
+            if all_arguments_are_fixtures:
+                fixturedefs = self._arg2fixturedefs or {}
+                used_scopes = [
+                    fixturedef[0].scope
+                    for name, fixturedef in fixturedefs.items()
+                    if name in argnames
+                ]
+                if used_scopes:
+                    # Takes the most narrow scope from used fixtures.
+                    for the_scope in reversed(fixtures.scopes):
+                        if the_scope in used_scopes:
+                            scope = the_scope
+                            break
 
-        self._validate_if_using_arg_names(argnames, indirect)
+            if scope is None:
+                scope = "function"
 
-        arg_values_types = self._resolve_arg_value_types(argnames, indirect)
+        # Check if all argnames are being used, by default values, or directly/indirectly.
+        default_arg_names = set(get_default_arg_names(self.function))
+        func_name = self.function.__name__
+        for arg in argnames:
+            if arg not in self.fixturenames:
+                if arg in default_arg_names:
+                    fail(
+                        "In {}: function already takes an argument '{}' with a default value".format(
+                            func_name, arg
+                        ),
+                        pytrace=False,
+                    )
+                else:
+                    if isinstance(indirect, Sequence):
+                        name = "fixture" if arg in indirect else "argument"
+                    else:
+                        name = "fixture" if indirect else "argument"
+                    fail(
+                        "In {}: function uses no {} '{}'".format(func_name, name, arg),
+                        pytrace=False,
+                    )
+
+        # Resolve if each parametrized argument must be considered a
+        # parameter to a fixture or a "funcarg" to the function, based on the
+        # ``indirect`` parameter of the parametrized() call.
+        # arg_values_types is a dict mapping each arg name to either:
+        # * "params" if the argname should be the parameter of a fixture of the same name.
+        # * "funcargs" if the argname should be a parameter to the parametrized test function.
+        if isinstance(indirect, bool):
+            arg_values_types = dict.fromkeys(
+                argnames, "params" if indirect else "funcargs"
+            )  # type: Dict[str, Literal["params", "funcargs"]]
+        elif isinstance(indirect, Sequence):
+            arg_values_types = dict.fromkeys(argnames, "funcargs")
+            for arg in indirect:
+                if arg not in argnames:
+                    fail(
+                        "In {}: indirect fixture '{}' doesn't exist".format(
+                            self.function.__name__, arg
+                        ),
+                        pytrace=False,
+                    )
+                arg_values_types[arg] = "params"
+        else:
+            fail(
+                "In {func}: expected Sequence or boolean for indirect, got {type}".format(
+                    type=type(indirect).__name__, func=self.function.__name__
+                ),
+                pytrace=False,
+            )
 
         # Use any already (possibly) generated ids with parametrize Marks.
         if _param_mark and _param_mark._param_ids_from:
@@ -1077,16 +1116,30 @@ class Metafunc:
         newcalls = []
         for callspec in self._calls or [CallSpec2(self)]:
             for param_index, (param_id, param_set) in enumerate(zip(ids, parameters)):
-                newcallspec = callspec.copy()
-                newcallspec.setmulti2(
-                    arg_values_types,
-                    argnames,
-                    param_set.values,
-                    param_id,
-                    param_set.marks,
-                    scopenum,
-                    param_index,
-                )
+                newcallspec = CallSpec2(callspec.metafunc)
+                newcallspec.funcargs.update(callspec.funcargs)
+                newcallspec._idlist.extend(callspec._idlist)
+                newcallspec.params.update(callspec.params)
+                newcallspec._arg2scopenum.update(callspec._arg2scopenum)
+                newcallspec.marks.extend(callspec.marks)
+                newcallspec.indices.update(callspec.indices)
+
+                for arg, val in zip(argnames, param_set.values):
+                    if arg in newcallspec.params or arg in newcallspec.funcargs:
+                        raise ValueError("duplicate {!r}".format(arg))
+
+                    valtype_for_arg = arg_values_types[arg]
+                    if valtype_for_arg == "params":
+                        newcallspec.params[arg] = val
+                    elif valtype_for_arg == "funcargs":
+                        newcallspec.funcargs[arg] = val
+                    else:
+                        assert_never(valtype_for_arg)
+                    newcallspec.indices[arg] = param_index
+                    newcallspec._arg2scopenum[arg] = scopenum
+                newcallspec._idlist.append(param_id)
+                newcallspec.marks.extend(normalize_mark_list(param_set.marks))
+
                 newcalls.append(newcallspec)
         self._calls = newcalls
 
@@ -1159,109 +1212,6 @@ class Metafunc:
                     pytrace=False,
                 )
         return new_ids
-
-    def _resolve_arg_value_types(
-        self, argnames: Sequence[str], indirect: Union[bool, Sequence[str]],
-    ) -> Dict[str, "Literal['params', 'funcargs']"]:
-        """Resolve if each parametrized argument must be considered a
-        parameter to a fixture or a "funcarg" to the function, based on the
-        ``indirect`` parameter of the parametrized() call.
-
-        :param List[str] argnames: List of argument names passed to ``parametrize()``.
-        :param indirect: Same as the ``indirect`` parameter of ``parametrize()``.
-        :rtype: Dict[str, str]
-            A dict mapping each arg name to either:
-            * "params" if the argname should be the parameter of a fixture of the same name.
-            * "funcargs" if the argname should be a parameter to the parametrized test function.
-        """
-        if isinstance(indirect, bool):
-            valtypes = dict.fromkeys(
-                argnames, "params" if indirect else "funcargs"
-            )  # type: Dict[str, Literal["params", "funcargs"]]
-        elif isinstance(indirect, Sequence):
-            valtypes = dict.fromkeys(argnames, "funcargs")
-            for arg in indirect:
-                if arg not in argnames:
-                    fail(
-                        "In {}: indirect fixture '{}' doesn't exist".format(
-                            self.function.__name__, arg
-                        ),
-                        pytrace=False,
-                    )
-                valtypes[arg] = "params"
-        else:
-            fail(
-                "In {func}: expected Sequence or boolean for indirect, got {type}".format(
-                    type=type(indirect).__name__, func=self.function.__name__
-                ),
-                pytrace=False,
-            )
-        return valtypes
-
-    def _validate_if_using_arg_names(
-        self, argnames: Sequence[str], indirect: Union[bool, Sequence[str]],
-    ) -> None:
-        """Check if all argnames are being used, by default values, or directly/indirectly.
-
-        :param List[str] argnames: List of argument names passed to ``parametrize()``.
-        :param indirect: Same as the ``indirect`` parameter of ``parametrize()``.
-        :raises ValueError: If validation fails.
-        """
-        default_arg_names = set(get_default_arg_names(self.function))
-        func_name = self.function.__name__
-        for arg in argnames:
-            if arg not in self.fixturenames:
-                if arg in default_arg_names:
-                    fail(
-                        "In {}: function already takes an argument '{}' with a default value".format(
-                            func_name, arg
-                        ),
-                        pytrace=False,
-                    )
-                else:
-                    if isinstance(indirect, Sequence):
-                        name = "fixture" if arg in indirect else "argument"
-                    else:
-                        name = "fixture" if indirect else "argument"
-                    fail(
-                        "In {}: function uses no {} '{}'".format(func_name, name, arg),
-                        pytrace=False,
-                    )
-
-
-def _find_parametrized_scope(
-    argnames: Sequence[str],
-    arg2fixturedefs: Mapping[str, Sequence[fixtures.FixtureDef[object]]],
-    indirect: Union[bool, Sequence[str]],
-) -> "fixtures._Scope":
-    """Find the most appropriate scope for a parametrized call based on its arguments.
-
-    When there's at least one direct argument, always use "function" scope.
-
-    When a test function is parametrized and all its arguments are indirect
-    (e.g. fixtures), return the most narrow scope based on the fixtures used.
-
-    Related to issue #1832, based on code posted by @Kingdread.
-    """
-    if isinstance(indirect, Sequence):
-        all_arguments_are_fixtures = len(indirect) == len(argnames)
-    else:
-        all_arguments_are_fixtures = bool(indirect)
-
-    if all_arguments_are_fixtures:
-        fixturedefs = arg2fixturedefs or {}
-        used_scopes = [
-            fixturedef[0].scope
-            for name, fixturedef in fixturedefs.items()
-            if name in argnames
-        ]
-        if used_scopes:
-            # Takes the most narrow scope from used fixtures.
-            for scope in reversed(fixtures.scopes):
-                if scope in used_scopes:
-                    return scope
-
-    return "function"
 
 
 def _ascii_escaped_by_config(val: Union[str, bytes], config: Optional[Config]) -> str:
