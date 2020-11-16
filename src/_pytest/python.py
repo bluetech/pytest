@@ -67,7 +67,6 @@ from _pytest.outcomes import fail
 from _pytest.outcomes import skip
 from _pytest.pathlib import import_path
 from _pytest.pathlib import ImportPathMismatchError
-from _pytest.pathlib import parts
 from _pytest.pathlib import safe_scandir
 from _pytest.warning_types import PytestCollectionWarning
 from _pytest.warning_types import PytestUnhandledCoroutineWarning
@@ -687,35 +686,27 @@ class Package(Module):
 
     def collect(self) -> Iterable[Union[nodes.Item, nodes.Collector]]:
         this_path = self.fspath.dirpath()
+
+        # If __init__.py is allowed, always collect it first in the package.
+        # Don't go through _collectfile() -- it turns __init__.py to a Package
+        # which would bring us right back here.
         init_module = this_path.join("__init__.py")
         if init_module.check(file=1) and path_matches_patterns(
             init_module, self.config.getini("python_files")
         ):
             yield Module.from_parent(self, fspath=init_module)
-        pkg_prefixes: Set[py.path.local] = set()
+
         direntries = sorted(safe_scandir(this_path), key=lambda entry: entry.path)
         for direntry in direntries:
+            if not direntry.is_file():
+                continue
+
+            # Handled above.
+            if direntry.name == "__init__.py":
+                continue
+
             path = py.path.local(direntry.path)
-
-            # We will visit our own __init__.py file, in which case we skip it.
-            if direntry.is_file():
-                if direntry.name == "__init__.py" and path.dirpath() == this_path:
-                    continue
-
-            parts_ = parts(direntry.path)
-            if any(
-                str(pkg_prefix) in parts_ and pkg_prefix.join("__init__.py") != path
-                for pkg_prefix in pkg_prefixes
-            ):
-                continue
-
-            if direntry.is_file():
-                yield from self._collectfile(path)
-            elif not direntry.is_dir():
-                # Broken symlink or invalid/missing file.
-                continue
-            elif path.join("__init__.py").check(file=1):
-                pkg_prefixes.add(path)
+            yield from self._collectfile(path)
 
 
 def _call_with_optional_argument(func, arg) -> None:
