@@ -570,17 +570,9 @@ def resolve_package_path(path: Path) -> Optional[Path]:
     return result
 
 
-def visit(
-    path: str, recurse: Callable[["os.DirEntry[str]"], bool]
-) -> Iterator["os.DirEntry[str]"]:
-    """Walk a directory recursively, in breadth-first order.
-
-    Entries at each directory level are sorted.
-    """
-
-    # Skip entries with symlink loops and other brokenness, so the caller doesn't
-    # have to deal with it.
-    entries = []
+def safe_scandir(path: Union[str, "os.PathLike[str]"]) -> Iterator["os.DirEntry[str]"]:
+    """Same as os.scandir(), but skip entries with symlink loops and other
+    brokenness, so the caller doesn't have to deal with it."""
     for entry in os.scandir(path):
         try:
             entry.is_file()
@@ -588,9 +580,17 @@ def visit(
             if _ignore_error(err):
                 continue
             raise
-        entries.append(entry)
+        yield entry
 
-    entries.sort(key=lambda entry: entry.name)
+
+def visit(
+    path: str, recurse: Callable[["os.DirEntry[str]"], bool]
+) -> Iterator["os.DirEntry[str]"]:
+    """Walk a directory recursively, in breadth-first order.
+
+    Entries at each directory level are sorted.
+    """
+    entries = sorted(safe_scandir(path), key=lambda entry: entry.name)
 
     yield from entries
 
