@@ -68,7 +68,7 @@ from _pytest.outcomes import skip
 from _pytest.pathlib import import_path
 from _pytest.pathlib import ImportPathMismatchError
 from _pytest.pathlib import parts
-from _pytest.pathlib import visit
+from _pytest.pathlib import safe_scandir
 from _pytest.warning_types import PytestCollectionWarning
 from _pytest.warning_types import PytestUnhandledCoroutineWarning
 
@@ -661,18 +661,6 @@ class Package(Module):
         warnings.warn(FSCOLLECTOR_GETHOOKPROXY_ISINITPATH, stacklevel=2)
         return self.session.isinitpath(path)
 
-    def _recurse(self, direntry: "os.DirEntry[str]") -> bool:
-        if direntry.name == "__pycache__":
-            return False
-        path = py.path.local(direntry.path)
-        ihook = self.session.gethookproxy(path.dirpath())
-        if ihook.pytest_ignore_collect(path=path, config=self.config):
-            return False
-        norecursepatterns = self.config.getini("norecursedirs")
-        if any(path.check(fnmatch=pat) for pat in norecursepatterns):
-            return False
-        return True
-
     def _collectfile(
         self, path: py.path.local, handle_dupes: bool = True
     ) -> Sequence[nodes.Collector]:
@@ -705,7 +693,8 @@ class Package(Module):
         ):
             yield Module.from_parent(self, fspath=init_module)
         pkg_prefixes: Set[py.path.local] = set()
-        for direntry in visit(str(this_path), recurse=self._recurse):
+        direntries = sorted(safe_scandir(this_path), key=lambda entry: entry.path)
+        for direntry in direntries:
             path = py.path.local(direntry.path)
 
             # We will visit our own __init__.py file, in which case we skip it.
