@@ -568,19 +568,6 @@ To use it, include in your topmost ``conftest.py`` file:
 .. autoclass:: _pytest.pytester.HookRecorder()
     :members:
 
-.. fixture:: testdir
-
-testdir
-~~~~~~~
-
-Identical to :fixture:`pytester`, but provides an instance whose methods return
-legacy ``py.path.local`` objects instead when applicable.
-
-New code should avoid using :fixture:`testdir` in favor of :fixture:`pytester`.
-
-.. autoclass:: pytest.Testdir()
-    :members:
-
 
 .. fixture:: recwarn
 

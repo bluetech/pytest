@@ -42,7 +42,6 @@ from _pytest.outcomes import importorskip
 from _pytest.outcomes import skip
 from _pytest.outcomes import xfail
 from _pytest.pytester import Pytester
-from _pytest.pytester import Testdir
 from _pytest.python import Class
 from _pytest.python import Function
 from _pytest.python import Instance
@@ -137,7 +136,6 @@ __all__ = [
     "StashKey",
     "version_tuple",
     "TempPathFactory",
-    "Testdir",
     "TempdirFactory",
     "UsageError",
     "WarningsRecorder",

@@ -63,10 +63,6 @@ Built-in fixtures
    :fixture:`request`
        Provide information on the executing test function.
 
-   :fixture:`testdir`
-        Provide a temporary test directory to aid in running, and
-        testing, pytest plugins.
-
    :fixture:`tmp_path`
        Provide a :class:`pathlib.Path` object to a temporary directory
        which is unique to each test function.
