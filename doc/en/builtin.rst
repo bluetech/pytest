@@ -153,25 +153,8 @@ For information about fixtures, see :ref:`fixtures`. To see a complete list of a
         See https://docs.python.org/library/how-to/capture-warnings.html for information
         on warning categories.
 
-    tmpdir_factory [session scope] -- ../../../..$PYTHON_SITE/_pytest/tmpdir.py:210
-        Return a :class:`pytest.TempdirFactory` instance for the test session.
-
     tmp_path_factory [session scope] -- ../../../..$PYTHON_SITE/_pytest/tmpdir.py:217
         Return a :class:`pytest.TempPathFactory` instance for the test session.
-
-    tmpdir -- ../../../..$PYTHON_SITE/_pytest/tmpdir.py:232
-        Return a temporary directory path object which is unique to each test
-        function invocation, created as a sub directory of the base temporary
-        directory.
-
-        By default, a new base temporary directory is created each test session,
-        and old bases are removed after 3 sessions, to aid in debugging. If
-        ``--basetemp`` is used then it is cleared each session. See :ref:`base
-        temporary directory`.
-
-        The returned object is a `legacy_path`_ object.
-
-        .. _legacy_path: https://py.readthedocs.io/en/latest/path.html
 
     tmp_path -- ../../../..$PYTHON_SITE/_pytest/tmpdir.py:250
         Return a temporary directory path object which is unique to each test

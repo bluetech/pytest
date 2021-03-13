@@ -71,18 +71,6 @@ Built-in fixtures
         Make session-scoped temporary directories and return
         :class:`pathlib.Path` objects.
 
-   :fixture:`tmpdir`
-        Provide a :class:`py.path.local` object to a temporary
-        directory which is unique to each test function;
-        replaced by :fixture:`tmp_path`.
-
-        .. _`py.path.local`: https://py.readthedocs.io/en/latest/path.html
-
-   :fixture:`tmpdir_factory`
-        Make session-scoped temporary directories and return
-        :class:`py.path.local` objects;
-        replaced by :fixture:`tmp_path_factory`.
-
 
 .. _`conftest.py`:
 .. _`conftest`:

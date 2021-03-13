@@ -97,21 +97,6 @@ to save time:
 
 See :ref:`tmp_path_factory API <tmp_path_factory factory api>` for details.
 
-.. _`tmpdir and tmpdir_factory`:
-.. _tmpdir:
-
-The ``tmpdir`` and ``tmpdir_factory`` fixtures
----------------------------------------------------
-
-The ``tmpdir`` and ``tmpdir_factory`` fixtures are similar to ``tmp_path``
-and ``tmp_path_factory``, but use/return legacy `py.path.local`_ objects
-rather than standard :class:`pathlib.Path` objects. These days, prefer to
-use ``tmp_path`` and ``tmp_path_factory``.
-
-See :fixture:`tmpdir <tmpdir>` :fixture:`tmpdir_factory <tmpdir_factory>`
-API for details.
-
-
 .. _`base temporary directory`:
 
 The default base temporary directory

@@ -615,30 +615,6 @@ tmp_path_factory
     :members:
 
 
-.. fixture:: tmpdir
-
-tmpdir
-~~~~~~
-
-:ref:`tmpdir and tmpdir_factory`
-
-.. autofunction:: _pytest.tmpdir.tmpdir()
-    :no-auto-options:
-
-
-.. fixture:: tmpdir_factory
-
-tmpdir_factory
-~~~~~~~~~~~~~~
-
-:ref:`tmpdir and tmpdir_factory`
-
-``tmpdir_factory`` is an instance of :class:`~pytest.TempdirFactory`:
-
-.. autoclass:: pytest.TempdirFactory()
-    :members:
-
-
 .. _`hook-reference`:
 
 Hooks
