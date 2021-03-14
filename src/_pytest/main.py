@@ -543,10 +543,7 @@ class Session(nodes.FSCollector):
         )
         remove_mods = pm._conftest_plugins.difference(my_conftestmodules)
         if remove_mods:
-            # One or more conftests are not in use at this fspath.
-            from .config.compat import PathAwareHookProxy
-
-            proxy = PathAwareHookProxy(FSHookProxy(pm, remove_mods))
+            proxy = FSHookProxy(pm, remove_mods)
         else:
             # All plugins are active for this fspath.
             proxy = self.config.hook
