@@ -4,7 +4,6 @@ from inspect import signature
 from pathlib import Path
 from typing import Any
 from typing import Callable
-from typing import cast
 from typing import Iterable
 from typing import Iterator
 from typing import List
@@ -23,8 +22,6 @@ from _pytest._code import getfslineno
 from _pytest._code.code import ExceptionInfo
 from _pytest._code.code import TerminalRepr
 from _pytest.compat import cached_property
-from _pytest.compat import LEGACY_PATH
-from _pytest.compat import legacy_path
 from _pytest.config import Config
 from _pytest.config import ConftestImportFailure
 from _pytest.deprecated import FSCOLLECTOR_GETHOOKPROXY_ISINITPATH
@@ -93,40 +90,6 @@ def iterparentnodeids(nodeid: str) -> Iterator[str]:
         yield nodeid
 
 
-def _check_path(path: Path, fspath: LEGACY_PATH) -> None:
-    if Path(fspath) != path:
-        raise ValueError(
-            f"Path({fspath!r}) != {path!r}\n"
-            "if both path and fspath are given they need to be equal"
-        )
-
-
-def _imply_path(
-    path: Optional[Path], fspath: Optional[LEGACY_PATH]
-) -> Tuple[Path, LEGACY_PATH]:
-    if path is not None:
-        if fspath is not None:
-            _check_path(path, fspath)
-        else:
-            fspath = legacy_path(path)
-        return path, fspath
-    else:
-        assert fspath is not None
-        return Path(fspath), fspath
-
-
-# Optimization: use _imply_path_only over _imply_path when only need Path.
-# This is to avoid `legacy_path(path)` which is surprisingly heavy.
-def _imply_path_only(path: Optional[Path], fspath: Optional[LEGACY_PATH]) -> Path:
-    if path is not None:
-        if fspath is not None:
-            _check_path(path, fspath)
-        return path
-    else:
-        assert fspath is not None
-        return Path(fspath)
-
-
 _NodeType = TypeVar("_NodeType", bound="Node")
 
 
@@ -183,7 +146,6 @@ class Node(metaclass=NodeMeta):
         parent: "Optional[Node]" = None,
         config: Optional[Config] = None,
         session: "Optional[Session]" = None,
-        fspath: Optional[LEGACY_PATH] = None,
         path: Optional[Path] = None,
         nodeid: Optional[str] = None,
     ) -> None:
@@ -210,9 +172,7 @@ class Node(metaclass=NodeMeta):
             self.session = parent.session
 
         #: Filesystem path where this node was collected from (can be None).
-        self.path = _imply_path_only(
-            path or getattr(parent, "path", None), fspath=fspath
-        )
+        self.path = path or getattr(parent, "path", None)
 
         # The explicit annotation is to avoid publicly exposing NodeKeywords.
         #: Keywords/markers collected from all scopes.
@@ -241,15 +201,6 @@ class Node(metaclass=NodeMeta):
         self.stash = Stash()
         # Deprecated alias. Was never public. Can be removed in a few releases.
         self._store = self.stash
-
-    @property
-    def fspath(self) -> LEGACY_PATH:
-        """(deprecated) returns a legacy_path copy of self.path"""
-        return legacy_path(self.path)
-
-    @fspath.setter
-    def fspath(self, value: LEGACY_PATH) -> None:
-        self.path = Path(value)
 
     @classmethod
     def from_parent(cls, parent: "Node", **kw):
@@ -572,34 +523,22 @@ def _check_initialpaths_for_relpath(session: "Session", path: Path) -> Optional[
 class FSCollector(Collector):
     def __init__(
         self,
-        fspath: Optional[LEGACY_PATH] = None,
-        path_or_parent: Optional[Union[Path, Node]] = None,
-        path: Optional[Path] = None,
+        path: Path,
         name: Optional[str] = None,
         parent: Optional[Node] = None,
         config: Optional[Config] = None,
         session: Optional["Session"] = None,
         nodeid: Optional[str] = None,
     ) -> None:
-        if path_or_parent:
-            if isinstance(path_or_parent, Node):
-                assert parent is None
-                parent = cast(FSCollector, path_or_parent)
-            elif isinstance(path_or_parent, Path):
-                assert path is None
-                path = path_or_parent
-
-        path = _imply_path_only(path, fspath=fspath)
-        if name is None:
-            name = path.name
-            if parent is not None and parent.path != path:
-                try:
-                    rel = path.relative_to(parent.path)
-                except ValueError:
-                    pass
-                else:
-                    name = str(rel)
-                name = name.replace(os.sep, SEP)
+        name = path.name
+        if parent is not None and parent.path != path:
+            try:
+                rel = path.relative_to(parent.path)
+            except ValueError:
+                pass
+            else:
+                name = str(rel)
+            name = name.replace(os.sep, SEP)
         self.path = path
 
         if session is None:
@@ -625,17 +564,15 @@ class FSCollector(Collector):
         )
 
     @classmethod
-    def from_parent(
+    def from_parent(  # type: ignore[override]
         cls,
         parent,
         *,
-        fspath: Optional[LEGACY_PATH] = None,
-        path: Optional[Path] = None,
+        path: Path,
         **kw,
     ):
         """The public constructor."""
-        path, fspath = _imply_path(path, fspath=fspath)
-        return super().from_parent(parent=parent, fspath=fspath, path=path, **kw)
+        return super().from_parent(parent=parent, path=path, **kw)
 
     def gethookproxy(self, fspath: "os.PathLike[str]"):
         warnings.warn(FSCOLLECTOR_GETHOOKPROXY_ISINITPATH, stacklevel=2)

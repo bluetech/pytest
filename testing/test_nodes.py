@@ -5,7 +5,6 @@ from typing import Type
 
 import pytest
 from _pytest import nodes
-from _pytest.compat import legacy_path
 from _pytest.outcomes import OutcomeException
 from _pytest.pytester import Pytester
 from _pytest.warning_types import PytestWarning
@@ -72,16 +71,9 @@ def test_subclassing_both_item_and_collector_deprecated(
     ):
 
         class SoWrong(nodes.File, nodes.Item):
-            def __init__(self, fspath, parent):
+            def __init__(self, path, parent):
                 """Legacy ctor with legacy call # don't wana see"""
-                super().__init__(fspath, parent)
-
-    with pytest.warns(
-        PytestWarning, match=".*SoWrong.* not using a cooperative constructor.*"
-    ):
-        SoWrong.from_parent(
-            request.session, fspath=legacy_path(tmp_path / "broken.txt")
-        )
+                super().__init__(path, parent)
 
 
 @pytest.mark.parametrize(

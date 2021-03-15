@@ -47,7 +47,6 @@ from _pytest.compat import getimfunc
 from _pytest.compat import getlocation
 from _pytest.compat import is_async_function
 from _pytest.compat import is_generator
-from _pytest.compat import LEGACY_PATH
 from _pytest.compat import NOTSET
 from _pytest.compat import safe_getattr
 from _pytest.compat import safe_isclass
@@ -576,6 +575,7 @@ class Module(nodes.File, PyCollector):
     def _importtestmodule(self):
         # We assume we are only called once per module.
         importmode = self.config.getoption("--import-mode")
+        assert self.path is not None
         try:
             mod = import_path(self.path, mode=importmode, root=self.config.rootpath)
         except SyntaxError as e:
@@ -624,20 +624,18 @@ class Module(nodes.File, PyCollector):
 class Package(Module):
     def __init__(
         self,
-        fspath: Optional[LEGACY_PATH],
         parent: nodes.Collector,
+        path: Path,
         # NOTE: following args are unused:
         config=None,
         session=None,
         nodeid=None,
-        path=Optional[Path],
     ) -> None:
         # NOTE: Could be just the following, but kept as-is for compat.
         # nodes.FSCollector.__init__(self, fspath, parent=parent)
         session = parent.session
         nodes.FSCollector.__init__(
             self,
-            fspath=fspath,
             path=path,
             parent=parent,
             config=config,
@@ -707,6 +705,7 @@ class Package(Module):
         return ihook.pytest_collect_file(fspath=fspath, parent=self)  # type: ignore[no-any-return]
 
     def collect(self) -> Iterable[Union[nodes.Item, nodes.Collector]]:
+        assert self.path is not None
         this_path = self.path.parent
         init_module = this_path / "__init__.py"
         if init_module.is_file() and path_matches_patterns(

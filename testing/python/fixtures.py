@@ -1097,12 +1097,11 @@ class TestRequestSessionScoped:
     def session_request(self, request):
         return request
 
-    @pytest.mark.parametrize("name", ["path", "fspath", "module"])
+    @pytest.mark.parametrize("name", ["path", "module"])
     def test_session_scoped_unavailable_attributes(self, session_request, name):
-        expected = "path" if name == "fspath" else name
         with pytest.raises(
             AttributeError,
-            match=f"{expected} not available in session-scoped context",
+            match=f"{name} not available in session-scoped context",
         ):
             getattr(session_request, name)
 

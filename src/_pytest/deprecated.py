@@ -93,14 +93,6 @@ ARGUMENT_TYPE_STR = UnformattedWarning(
     " (options: {names})",
 )
 
-
-HOOK_LEGACY_PATH_ARG = UnformattedWarning(
-    PytestDeprecationWarning,
-    "The ({pylib_path_arg}: py.path.local) argument is deprecated, please use ({pathlib_path_arg}: pathlib.Path)\n"
-    "see https://docs.pytest.org/en/latest/deprecations.html"
-    "#py-path-local-arguments-for-hooks-replaced-with-pathlib-path",
-)
-
 WARNS_NONE_ARG = PytestDeprecationWarning(
     "Passing None to catch any warning has been deprecated, pass no arguments instead:\n"
     " Replace pytest.warns(None) by simply pytest.warns()."

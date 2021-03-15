@@ -463,7 +463,6 @@ class Session(nodes.FSCollector):
     def __init__(self, config: Config) -> None:
         super().__init__(
             path=config.rootpath,
-            fspath=None,
             parent=None,
             config=config,
             session=self,
