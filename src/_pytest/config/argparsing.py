@@ -166,9 +166,7 @@ class Parser:
         self,
         name: str,
         help: str,
-        type: Optional[
-            "Literal['string', 'paths', 'pathlist', 'args', 'linelist', 'bool']"
-        ] = None,
+        type: Optional["Literal['string', 'paths', 'args', 'linelist', 'bool']"] = None,
         default=None,
     ) -> None:
         """Register an ini-file option.
@@ -183,7 +181,6 @@ class Parser:
                 * ``args``: a list of strings, separated as in a shell
                 * ``linelist``: a list of strings, separated by line breaks
                 * ``paths``: a list of :class:`pathlib.Path`, separated as in a shell
-                * ``pathlist``: a list of ``py.path``, separated as in a shell
 
             .. versionadded:: 6.3
                 The ``paths`` variable type.
@@ -195,7 +192,7 @@ class Parser:
         The value of ini-variables can be retrieved via a call to
         :py:func:`config.getini(name) <pytest.Config.getini>`.
         """
-        assert type in (None, "string", "paths", "pathlist", "args", "linelist", "bool")
+        assert type in (None, "string", "paths", "args", "linelist", "bool")
         self._inidict[name] = (help, type, default)
         self._ininames.append(name)
 

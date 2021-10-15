@@ -47,7 +47,6 @@ from _pytest._code import filter_traceback
 from _pytest._io import TerminalWriter
 from _pytest.compat import final
 from _pytest.compat import importlib_metadata
-from _pytest.compat import legacy_path
 from _pytest.outcomes import fail
 from _pytest.outcomes import Skipped
 from _pytest.pathlib import absolutepath
@@ -1398,13 +1397,7 @@ class Config:
         #     a_line_list = ["tests", "acceptance"]
         #   in this case, we already have a list ready to use.
         #
-        if type == "pathlist":
-            # TODO: This assert is probably not valid in all cases.
-            assert self.inipath is not None
-            dp = self.inipath.parent
-            input_values = shlex.split(value) if isinstance(value, str) else value
-            return [legacy_path(str(dp / x)) for x in input_values]
-        elif type == "paths":
+        if type == "paths":
             # TODO: This assert is probably not valid in all cases.
             assert self.inipath is not None
             dp = self.inipath.parent
