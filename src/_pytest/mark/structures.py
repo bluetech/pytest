@@ -362,9 +362,22 @@ class MarkDecorator:
 
 def get_unpacked_marks(obj: object) -> Iterable[Mark]:
     """Obtain the unpacked marks that are stored on an object."""
-    mark_list = getattr(obj, "pytestmark", [])
-    if not isinstance(mark_list, list):
-        mark_list = [mark_list]
+    pytestmark = getattr(obj, "pytestmark", [])
+    if isinstance(pytestmark, list):
+        mark_list = pytestmark
+    elif isinstance(pytestmark, Mark):
+        mark_list = [pytestmark]
+    else:
+        msg = (
+            f"While accessing the `pytestmark` attribute of {obj!r}, "
+            f"got {pytestmark!r} instead of a Mark or a list of Marks."
+        )
+        if hasattr(obj, "__getattr__"):
+            msg += (
+                " The problem may be caused by a faulty `__getattr__` implementation;"
+                " make sure `AttributeError` is raised for `pytestmark`."
+            )
+        raise TypeError(msg)
     return normalize_mark_list(mark_list)
 
 
