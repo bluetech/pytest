@@ -28,8 +28,8 @@ from _pytest.compat import final
 from _pytest.config import Config
 from _pytest.config import directory_arg
 from _pytest.config import ExitCode
+from _pytest.config import FSHookProxy
 from _pytest.config import hookimpl
-from _pytest.config import PytestPluginManager
 from _pytest.config import UsageError
 from _pytest.config.argparsing import Parser
 from _pytest.fixtures import FixtureManager
@@ -417,17 +417,6 @@ def pytest_collection_modifyitems(items: List[nodes.Item], config: Config) -> No
     if deselected:
         config.hook.pytest_deselected(items=deselected)
         items[:] = remaining
-
-
-class FSHookProxy:
-    def __init__(self, pm: PytestPluginManager, remove_mods) -> None:
-        self.pm = pm
-        self.remove_mods = remove_mods
-
-    def __getattr__(self, name: str):
-        x = self.pm.subset_hook_caller(name, remove_plugins=self.remove_mods)
-        self.__dict__[name] = x
-        return x
 
 
 class Interrupted(KeyboardInterrupt):

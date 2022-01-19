@@ -26,6 +26,7 @@ from _pytest.compat import cached_property
 from _pytest.compat import LEGACY_PATH
 from _pytest.config import Config
 from _pytest.config import ConftestImportFailure
+from _pytest.config import FSHookProxy
 from _pytest.deprecated import FSCOLLECTOR_GETHOOKPROXY_ISINITPATH
 from _pytest.deprecated import NODE_CTOR_FSPATH_ARG
 from _pytest.mark.structures import Mark
@@ -263,7 +264,24 @@ class Node(metaclass=NodeMeta):
     @property
     def ihook(self):
         """fspath-sensitive hook proxy used to call pytest hooks."""
-        return self.session.gethookproxy(self.path)
+        pm = self.config.pluginmanager
+        # Check if we have the common case of running
+        # hooks with all conftest.py files.
+        my_conftestmodules = pm._getconftestmodules(
+            self.path,
+            self.config.getoption("importmode"),
+            rootpath=self.config.rootpath,
+        )
+        remove_mods = pm._conftest_plugins.difference(my_conftestmodules)
+        if remove_mods:
+            # One or more conftests are not in use at this fspath.
+            from .config.compat import PathAwareHookProxy
+
+            proxy = PathAwareHookProxy(FSHookProxy(pm, remove_mods))
+        else:
+            # All plugins are active for this fspath.
+            proxy = self.config.hook
+        return proxy
 
     def __repr__(self) -> str:
         return "<{} {}>".format(self.__class__.__name__, getattr(self, "name", None))

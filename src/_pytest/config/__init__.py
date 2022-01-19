@@ -750,6 +750,17 @@ class PytestPluginManager(PluginManager):
             self.register(mod, modname)
 
 
+class FSHookProxy:
+    def __init__(self, pm: PytestPluginManager, remove_mods) -> None:
+        self.pm = pm
+        self.remove_mods = remove_mods
+
+    def __getattr__(self, name: str):
+        x = self.pm.subset_hook_caller(name, remove_plugins=self.remove_mods)
+        self.__dict__[name] = x
+        return x
+
+
 def _get_plugin_specs_as_list(
     specs: Union[None, types.ModuleType, str, Sequence[str]]
 ) -> List[str]:
