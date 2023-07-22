@@ -34,6 +34,7 @@ from _pytest.mark.structures import MarkDecorator
 from _pytest.mark.structures import NodeKeywords
 from _pytest.outcomes import fail
 from _pytest.pathlib import absolutepath
+from _pytest.pathlib import bestrelpath
 from _pytest.pathlib import commonpath
 from _pytest.stash import Stash
 from _pytest.warning_types import PytestWarning
@@ -571,14 +572,6 @@ class Collector(Node):
         return excinfo.traceback
 
 
-def _check_initialpaths_for_relpath(session: "Session", path: Path) -> Optional[str]:
-    for initial_path in session._initialpaths:
-        if commonpath(path, initial_path) == initial_path:
-            rel = str(path.relative_to(initial_path))
-            return "" if rel == "." else rel
-    return None
-
-
 class FSCollector(Collector):
     """Base class for filesystem collectors."""
 
@@ -619,11 +612,7 @@ class FSCollector(Collector):
             session = parent.session
 
         if nodeid is None:
-            try:
-                nodeid = str(self.path.relative_to(session.config.rootpath))
-            except ValueError:
-                nodeid = _check_initialpaths_for_relpath(session, path)
-
+            nodeid = bestrelpath(session.config.rootpath, self.path)
             if nodeid and os.sep != SEP:
                 nodeid = nodeid.replace(os.sep, SEP)
 

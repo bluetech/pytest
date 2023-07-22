@@ -1538,6 +1538,22 @@ class TestRootdir:
         assert rootpath == tmp_path / "myproject"
         assert inipath == tmp_path / "myproject" / "setup.cfg"
 
+    def test_with_ini_in_subdir(self, pytester: Pytester) -> None:
+        """Regression test for issue #11186."""
+        pytester.makefile(".ini", **{
+            "settings/pytest": "",
+        })
+        pytester.makepyfile(**{
+            "test/test_hello.py": "def test_hello(): pass",
+        })
+        result = pytester.runpytest("-c", "settings/pytest.ini")
+        assert result.ret == ExitCode.OK
+        result.stdout.fnmatch_lines([
+            f"rootdir: {pytester.path / 'settings'}",
+            "configfile: pytest.ini",
+            "test/test_hello.py *",
+        ])
+
 
 class TestOverrideIniArgs:
     @pytest.mark.parametrize("name", "setup.cfg tox.ini pytest.ini".split())

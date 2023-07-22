@@ -3924,8 +3924,31 @@ class TestParameterizedSubRequest:
             encoding="utf-8",
         )
 
-        os.chdir(tests_dir)
         pytester.syspathinsert(fixdir)
+
+        # .
+        #   tests/
+        #     test_foos.py
+        #   fixtures/
+        #     fix.py
+
+        # From root.
+        result = pytester.runpytest()
+        result.stdout.fnmatch_lines(
+            [
+                "The requested fixture has no parameter defined for test:",
+                "    tests/test_foos.py::test_foo",
+                "",
+                "Requested fixture 'fix_with_param' defined in:",
+                "fixtures/fix.py:4",
+                "Requested here:",
+                "tests/test_foos.py:4",
+                "*1 failed*",
+            ]
+        )
+
+        # With changed dir.
+        os.chdir(tests_dir)
         result = pytester.runpytest()
         result.stdout.fnmatch_lines(
             [
@@ -3947,12 +3970,28 @@ class TestParameterizedSubRequest:
         result.stdout.fnmatch_lines(
             [
                 "The requested fixture has no parameter defined for test:",
-                "    test_foos.py::test_foo",
+                "    ../tests/test_foos.py::test_foo",
                 "",
                 "Requested fixture 'fix_with_param' defined in:",
                 f"{fixfile}:4",
                 "Requested here:",
                 f"{testfile}:4",
+                "*1 failed*",
+            ]
+        )
+
+        # With non-overlapping rootdir, passing testfile.
+        result = pytester.runpytest("--rootdir", rootdir, testfile)
+        result.stdout.fnmatch_lines(
+            [
+                "The requested fixture has no parameter defined for test:",
+                # XXX: missing filename in funcitem.nodeid here!
+                "    ../tests/test_foos.py::test_foo",
+                "",
+                "Requested fixture 'fix_with_param' defined in:",
+                "{}:4".format(fixfile),
+                "Requested here:",
+                "{}:4".format(testfile),
                 "*1 failed*",
             ]
         )

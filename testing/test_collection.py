@@ -1337,7 +1337,7 @@ def test_collect_symlink_out_of_tree(pytester: Pytester) -> None:
             """
         def test_nodeid(request):
             # Should not contain sub/ prefix.
-            assert request.node.nodeid == "test_real.py::test_nodeid"
+            assert request.node.nodeid == "../out_of_tree/symlink_to_sub/test_real.py::test_nodeid"
         """
         ),
         encoding="utf-8",
@@ -1346,12 +1346,19 @@ def test_collect_symlink_out_of_tree(pytester: Pytester) -> None:
     out_of_tree = pytester.mkdir("out_of_tree")
     symlink_to_sub = out_of_tree.joinpath("symlink_to_sub")
     symlink_or_skip(sub, symlink_to_sub)
+
+    # .
+    #   sub/
+    #     test_real.py
+    #   out_of_tree/
+    #     symlink_to_sub -> <pytester.path>/sub/
+
     os.chdir(sub)
-    result = pytester.runpytest("-vs", "--rootdir=%s" % sub, symlink_to_sub)
+    result = pytester.runpytest("-vs", "--rootdir", sub, symlink_to_sub)
     result.stdout.fnmatch_lines(
         [
-            # Should not contain "sub/"!
-            "test_real.py::test_nodeid PASSED"
+            # Should not contain "/sub/"!
+            "../out_of_tree/symlink_to_sub/test_real.py::test_nodeid PASSED"
         ]
     )
     assert result.ret == 0

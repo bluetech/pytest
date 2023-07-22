@@ -10,6 +10,7 @@ import platform
 import sys
 import textwrap
 import warnings
+import os.path
 from collections import Counter
 from functools import partial
 from pathlib import Path
@@ -427,7 +428,7 @@ class TerminalReporter:
             if self.currentfspath is not None and self._show_progress_info:
                 self._write_progress_information_filling_space()
             self.currentfspath = fspath
-            relfspath = bestrelpath(self.startpath, fspath)
+            relfspath = bestrelpath(self.startpath, Path(os.path.normpath(fspath)))
             self._tw.line()
             self._tw.write(relfspath + " ")
         self._tw.write(res, flush=True, **markup)

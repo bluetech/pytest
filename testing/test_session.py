@@ -383,15 +383,15 @@ def test_collection_args_do_not_duplicate_modules(pytester: Pytester) -> None:
     )
 
 
-@pytest.mark.parametrize("path", ["root", "{relative}/root", "{environment}/root"])
+@pytest.mark.parametrize("path", ["root", "{absolute}/root", "{environment}/root"])
 def test_rootdir_option_arg(
     pytester: Pytester, monkeypatch: MonkeyPatch, path: str
 ) -> None:
     monkeypatch.setenv("PY_ROOTDIR_PATH", str(pytester.path))
-    path = path.format(relative=str(pytester.path), environment="$PY_ROOTDIR_PATH")
+    path = path.format(absolute=str(pytester.path), environment="$PY_ROOTDIR_PATH")
 
-    rootdir = pytester.path / "root" / "tests"
-    rootdir.mkdir(parents=True)
+    root_tests = pytester.path / "root" / "tests"
+    root_tests.mkdir(parents=True)
     pytester.makepyfile(
         """
         import os
@@ -400,11 +400,11 @@ def test_rootdir_option_arg(
     """
     )
 
-    result = pytester.runpytest(f"--rootdir={path}")
+    result = pytester.runpytest("--rootdir", path)
     result.stdout.fnmatch_lines(
         [
             f"*rootdir: {pytester.path}/root",
-            "root/test_rootdir_option_arg.py *",
+            "test_rootdir_option_arg.py *",
             "*1 passed*",
         ]
     )
