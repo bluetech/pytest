@@ -1402,10 +1402,10 @@ class TestRootdir:
         b = a / "b"
         b.mkdir()
         for args in ([str(tmp_path)], [str(a)], [str(b)]):
-            rootpath, parsed_inipath, _ = determine_setup(None, args)
+            rootpath, parsed_inipath, _ = determine_setup(None, args, False)
             assert rootpath == tmp_path
             assert parsed_inipath == inipath
-        rootpath, parsed_inipath, ini_config = determine_setup(None, [str(b), str(a)])
+        rootpath, parsed_inipath, ini_config = determine_setup(None, [str(b), str(a)], False)
         assert rootpath == tmp_path
         assert parsed_inipath == inipath
         assert ini_config == {"x": "10"}
@@ -1417,7 +1417,7 @@ class TestRootdir:
         a = tmp_path / "a"
         a.mkdir()
         (a / name).touch()
-        rootpath, parsed_inipath, _ = determine_setup(None, [str(a)])
+        rootpath, parsed_inipath, _ = determine_setup(None, [str(a)], False)
         assert rootpath == tmp_path
         assert parsed_inipath == inipath
 
@@ -1426,14 +1426,30 @@ class TestRootdir:
         a.mkdir()
         (a / "setup.cfg").touch()
         (tmp_path / "setup.py").touch()
-        rootpath, inipath, inicfg = determine_setup(None, [str(a)])
+        rootpath, inipath, inicfg = determine_setup(None, [str(a)], False)
         assert rootpath == tmp_path
         assert inipath is None
         assert inicfg == {}
 
     def test_nothing(self, tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+        rootpath, inipath, inicfg = determine_setup(None, [str(tmp_path)], False)
+        assert rootpath == tmp_path
+        assert inipath is None
+        assert inicfg == {}
+
+    def test_really_nothing(self, tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
-        rootpath, inipath, inicfg = determine_setup(None, [str(tmp_path)])
+        rootpath, inipath, inicfg = determine_setup(None, [], False)
+        assert rootpath == tmp_path
+        assert inipath is None
+        assert inicfg == {}
+
+    def test_pyargs(self, tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+        """Regression test for issue #2820."""
+        monkeypatch.chdir(tmp_path)
+        tmp_path.joinpath("foo").mkdir()
+        tmp_path.joinpath("foo").joinpath("pytest.ini").write_text("", encoding="utf-8")
+        rootpath, inipath, inicfg = determine_setup(None, ["foo"], True)
         assert rootpath == tmp_path
         assert inipath is None
         assert inicfg == {}
@@ -1455,7 +1471,7 @@ class TestRootdir:
         p = tmp_path / name
         p.touch()
         p.write_text(contents, encoding="utf-8")
-        rootpath, inipath, ini_config = determine_setup(str(p), [str(tmp_path)])
+        rootpath, inipath, ini_config = determine_setup(str(p), [str(tmp_path)], False)
         assert rootpath == tmp_path
         assert inipath == p
         assert ini_config == {"x": "10"}
@@ -1469,14 +1485,14 @@ class TestRootdir:
         monkeypatch.chdir(tmp_path)
 
         # No config file is explicitly given: rootdir is determined to be cwd.
-        rootpath, found_inipath, *_ = determine_setup(None, [str(tests_dir)])
+        rootpath, found_inipath, *_ = determine_setup(None, [str(tests_dir)], False)
         assert rootpath == tmp_path
         assert found_inipath is None
 
         # Config file is explicitly given: rootdir is determined to be inifile's directory.
         inipath = tmp_path / "pytest.ini"
         inipath.touch()
-        rootpath, found_inipath, *_ = determine_setup(str(inipath), [str(tests_dir)])
+        rootpath, found_inipath, *_ = determine_setup(str(inipath), [str(tests_dir)], False)
         assert rootpath == tmp_path
         assert found_inipath == inipath
 
@@ -1488,7 +1504,7 @@ class TestRootdir:
         a.mkdir()
         b = tmp_path / "b"
         b.mkdir()
-        rootpath, inifile, _ = determine_setup(None, [str(a), str(b)])
+        rootpath, inifile, _ = determine_setup(None, [str(a), str(b)], False)
         assert rootpath == tmp_path
         assert inifile is None
 
@@ -1499,7 +1515,7 @@ class TestRootdir:
         b.mkdir()
         inipath = a / "pytest.ini"
         inipath.touch()
-        rootpath, parsed_inipath, _ = determine_setup(None, [str(a), str(b)])
+        rootpath, parsed_inipath, _ = determine_setup(None, [str(a), str(b)], False)
         assert rootpath == a
         assert inipath == parsed_inipath
 
@@ -1508,7 +1524,7 @@ class TestRootdir:
         self, dirs: Sequence[str], tmp_path: Path, monkeypatch: MonkeyPatch
     ) -> None:
         monkeypatch.chdir(tmp_path)
-        rootpath, inipath, _ = determine_setup(None, dirs)
+        rootpath, inipath, _ = determine_setup(None, dirs, False)
         assert rootpath == tmp_path
         assert inipath is None
 
@@ -1519,7 +1535,7 @@ class TestRootdir:
         a.mkdir()
         (a / "exists").touch()
         monkeypatch.chdir(tmp_path)
-        rootpath, inipath, _ = determine_setup(None, ["a/exist"])
+        rootpath, inipath, _ = determine_setup(None, ["a/exist"], False)
         assert rootpath == tmp_path
         assert inipath is None
 
@@ -1533,7 +1549,7 @@ class TestRootdir:
         (tmp_path / "myproject" / "tests").mkdir()
         monkeypatch.chdir(tmp_path / "myproject")
 
-        rootpath, inipath, _ = determine_setup(None, ["tests/"])
+        rootpath, inipath, _ = determine_setup(None, ["tests/"], False)
 
         assert rootpath == tmp_path / "myproject"
         assert inipath == tmp_path / "myproject" / "setup.cfg"

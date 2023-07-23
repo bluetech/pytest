@@ -1169,6 +1169,7 @@ class Config:
         rootpath, inipath, inicfg = determine_setup(
             ns.inifilename,
             ns.file_or_dir + unknown_args,
+            pyargs=ns.pyargs,
             rootdir_cmd_arg=ns.rootdir or None,
             invocation_dir=self.invocation_params.dir,
         )

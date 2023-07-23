@@ -135,7 +135,13 @@ def get_common_ancestor(paths: Iterable[Path]) -> Path:
     return common_ancestor
 
 
-def get_dirs_from_args(args: Iterable[str]) -> List[Path]:
+def get_dirs_from_args(args: Iterable[str], pyargs: bool) -> List[Path]:
+    # If --pyargs, the arguments are Python package paths, not filesystem paths,
+    # so don't try to get dirs from them. (It is theoretically possible, but we
+    # don't, currently).
+    if pyargs:
+        return []
+
     def is_option(x: str) -> bool:
         return x.startswith("-")
 
@@ -171,6 +177,7 @@ CFG_PYTEST_SECTION = "[pytest] section in {filename} files is no longer supporte
 def determine_setup(
     inifile: Optional[str],
     args: Sequence[str],
+    pyargs: bool,
     rootdir_cmd_arg: Optional[str] = None,
     invocation_dir: Optional[Path] = None,
 ) -> Tuple[Path, Optional[Path], Dict[str, Union[str, List[str]]]]:
@@ -181,6 +188,8 @@ def determine_setup(
         The `--inifile` command line argument, if given.
     :param args:
         The free command line arguments.
+    :param pyargs:
+        Whether `args` are Python arguments (`--pyargs`).
     :param rootdir_cmd_arg:
         The `--rootdir` command line argument, if given.
     :param invocation_dir:
@@ -188,7 +197,6 @@ def determine_setup(
         If not known, the current working directory is used.
     """
     rootdir = None
-    dirs = get_dirs_from_args(args)
     if inifile:
         inipath_ = absolutepath(inifile)
         inipath: Optional[Path] = inipath_
@@ -196,6 +204,7 @@ def determine_setup(
         if rootdir_cmd_arg is None:
             rootdir = inipath_.parent
     else:
+        dirs = get_dirs_from_args(args, pyargs)
         ancestor = get_common_ancestor(dirs)
         rootdir, inipath, inicfg = locate_config([ancestor])
         if rootdir is None and rootdir_cmd_arg is None:

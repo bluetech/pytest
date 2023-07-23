@@ -170,6 +170,9 @@ Here is the algorithm which finds the rootdir from ``args``:
 If no ``args`` are given, pytest collects test below the current working
 directory and also starts determining the ``rootdir`` from there.
 
+.. versionchanged:: 8.0
+    If the ``--pyargs`` option is used, the behavior is as if no ``args`` are given.
+
 Files will only be matched for configuration if:
 
 * ``pytest.ini``: will always match and take precedence, even if empty.
