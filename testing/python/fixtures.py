@@ -4537,5 +4537,93 @@ def test_yield_fixture_with_no_value(pytester: Pytester) -> None:
 def test_deduplicate_names() -> None:
     items = deduplicate_names("abacd")
     assert items == ("a", "b", "c", "d")
-    items = deduplicate_names(items + ("g", "f", "g", "e", "b"))
+    items = deduplicate_names(items, ("g", "f", "g", "e", "b"), iter(items))
     assert items == ("a", "b", "c", "d", "g", "f", "e")
+
+
+def test_fixture_info_after_dynamic_parametrize(pytester: Pytester) -> None:
+    pytester.makeconftest(
+        """
+        import pytest
+
+        @pytest.fixture(scope='session', params=[0, 1])
+        def fixture1(request): pass
+
+        @pytest.fixture(scope='session')
+        def fixture2(fixture1): pass
+
+        @pytest.fixture(scope='session', params=[2, 3])
+        def fixture3(request, fixture2): pass
+        """
+    )
+    pytester.makepyfile(
+        """
+        import pytest
+
+        @pytest.fixture(scope='session')
+        def fixture4(): pass
+
+        @pytest.fixture(scope='session')
+        def fixture2(fixture3, fixture4): pass
+
+        @pytest.mark.parametrize('fixture2', [4, 5], scope='session')
+        def test(fixture2):
+            assert fixture2 in (4, 5)
+        """
+    )
+    res = pytester.inline_run()
+    res.assertoutcome(passed=2)
+
+
+def test_reordering_after_dynamic_parametrize(pytester: Pytester) -> None:
+    pytester.makepyfile(
+        """
+        import pytest
+
+        def pytest_generate_tests(metafunc):
+            if metafunc.definition.name == "test_0":
+                metafunc.parametrize("fixture2", [0])
+
+        @pytest.fixture(scope='module')
+        def fixture1(): pass
+
+        @pytest.fixture(scope='module')
+        def fixture2(fixture1): pass
+
+        def test_0(fixture2): pass
+
+        def test_1(): pass
+
+        def test_2(fixture1): pass
+        """
+    )
+    items, rec = pytester.inline_genitems()
+    assert [item.name for item in items] == [
+        "test_0[0]",
+        "test_1",
+        "test_2",
+    ]
+
+
+def test_request_shouldnt_be_in_closure_when_its_not_in_initial_closure(
+    pytester: Pytester,
+) -> None:
+    pytester.makepyfile(
+        """
+        import pytest
+
+        def pytest_generate_tests(metafunc):
+            metafunc.parametrize("arg", [0])
+
+        @pytest.fixture
+        def fixture(): pass
+
+        def test(fixture, arg): pass
+        """
+    )
+    result = pytester.runpytest("--setup-show")
+    result.stdout.re_match_lines(
+        [
+            r".+test\[0\] \(fixtures used: arg, fixture\)\.",
+        ],
+    )
