@@ -7,7 +7,6 @@ import importlib
 import os
 import sys
 from pathlib import Path
-from typing import AbstractSet
 from typing import Callable
 from typing import Dict
 from typing import final
@@ -433,16 +432,17 @@ def pytest_collection_modifyitems(items: List[nodes.Item], config: Config) -> No
 
 
 class FSHookProxy:
-    def __init__(
-        self,
-        pm: PytestPluginManager,
-        remove_mods: AbstractSet[object],
-    ) -> None:
-        self.pm = pm
-        self.remove_mods = remove_mods
+    def __init__(self, pm: PytestPluginManager, path: Path) -> None:
+        self._pm = pm
+        conftest_plugins = self._pm._conftest_plugins
+        path_conftestmodules = self._pm._getconftestmodules(path)
+        # If returns true, plugin is excluded.
+        self._predicate = lambda plugin: (
+            plugin in conftest_plugins and plugin not in path_conftestmodules
+        )
 
     def __getattr__(self, name: str) -> pluggy.HookCaller:
-        x = self.pm.subset_hook_caller(name, remove_plugins=self.remove_mods)
+        x = self._pm.subset_hook_caller(name, remove_plugins=self._predicate)
         self.__dict__[name] = x
         return x
 
@@ -569,16 +569,7 @@ class Session(nodes.FSCollector):
             self.config.getoption("importmode"),
             rootpath=self.config.rootpath,
         )
-        my_conftestmodules = pm._getconftestmodules(path)
-        remove_mods = pm._conftest_plugins.difference(my_conftestmodules)
-        proxy: pluggy.HookRelay
-        if remove_mods:
-            # One or more conftests are not in use at this path.
-            proxy = PathAwareHookProxy(FSHookProxy(pm, remove_mods))  # type: ignore[arg-type,assignment]
-        else:
-            # All plugins are active for this fspath.
-            proxy = self.config.hook
-        return proxy
+        return PathAwareHookProxy(FSHookProxy(pm, path))  # type: ignore[arg-type,return-value]
 
     def _recurse(self, direntry: "os.DirEntry[str]") -> bool:
         if direntry.name == "__pycache__":
