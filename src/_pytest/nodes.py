@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING
 from typing import TypeVar
 from typing import Union
 
+import pluggy
+
 import _pytest._code
 from _pytest._code import getfslineno
 from _pytest._code.code import ExceptionInfo
@@ -264,7 +266,7 @@ class Node(metaclass=NodeMeta):
         return cls._create(parent=parent, **kw)
 
     @property
-    def ihook(self):
+    def ihook(self) -> pluggy.HookRelay:
         """fspath-sensitive hook proxy used to call pytest hooks."""
         return self.session.gethookproxy(self.path)
 
