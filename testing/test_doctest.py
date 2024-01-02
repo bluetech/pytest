@@ -881,6 +881,46 @@ class TestDoctests:
         result = pytester.runpytest(p, "--doctest-modules")
         result.stdout.fnmatch_lines(["*collected 1 item*"])
 
+    def test_usefixtures_added_in_pytest_itemcollected(
+        self, pytester: Pytester
+    ) -> None:
+        """Regression test for issue #11759."""
+        pytester.makeconftest(
+            """
+            import warnings
+            import pytest
+
+            doctest_marker = pytest.mark.usefixtures("suppress_env")
+
+            @pytest.fixture
+            def suppress_env() -> None:
+                warnings.filterwarnings("ignore", category=FutureWarning)
+
+            def pytest_itemcollected(item: pytest.Item) -> None:
+                if isinstance(item, pytest.DoctestItem):
+                    item.add_marker(doctest_marker)
+            """
+        )
+        pytester.makepyfile(
+            test_warnings='''
+            import warnings
+
+            def has_doctest() -> None:
+                """Doctest!
+
+                >>> import warnings
+                >>> warnings.warn("Hi!", FutureWarning)
+                """
+
+            def test_warn(suppress_env) -> None:
+                warnings.warn("Hi!", FutureWarning)
+            '''
+        )
+
+        result = pytester.runpytest("--doctest-modules", "-Werror")
+        assert result.ret == 0
+        result.assert_outcomes(passed=2)
+
 
 class TestLiterals:
     @pytest.mark.parametrize("config_mode", ["ini", "comment"])
