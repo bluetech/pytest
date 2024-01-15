@@ -381,7 +381,7 @@ def pytest_make_collect_report(collector: Collector) -> CollectReport:
         #
         # Note: initial conftests are loaded early, not here.
         if isinstance(collector, Directory):
-            collector.config.pluginmanager._loadconftestmodules(
+            collector.config.pluginmanager._loadconftestmodule(
                 collector.path,
                 collector.config.getoption("importmode"),
                 rootpath=collector.config.rootpath,

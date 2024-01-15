@@ -168,7 +168,7 @@ class TestFillFixtures:
         p = pytester.copy_example()
         result = pytester.runpytest()
         result.stdout.fnmatch_lines(["*1 passed*"])
-        result = pytester.runpytest(str(next(Path(str(p)).rglob("test_*.py"))))
+        result = pytester.runpytest(next(p.rglob("test_*.py")))
         result.stdout.fnmatch_lines(["*1 passed*"])
 
     def test_extend_fixture_conftest_plugin(self, pytester: Pytester) -> None:

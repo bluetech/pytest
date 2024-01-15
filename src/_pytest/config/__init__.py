@@ -582,62 +582,37 @@ class PytestPluginManager(PluginManager):
     def _try_load_conftest(
         self, anchor: Path, importmode: Union[str, ImportMode], rootpath: Path
     ) -> None:
-        self._loadconftestmodules(anchor, importmode, rootpath)
+        self._loadconftestmodule(anchor, importmode, rootpath)
         # let's also consider test* subdirs
         if anchor.is_dir():
             for x in anchor.glob("test*"):
                 if x.is_dir():
-                    self._loadconftestmodules(x, importmode, rootpath)
+                    self._loadconftestmodule(x, importmode, rootpath)
 
-    def _loadconftestmodules(
+    def _loadconftestmodule(
         self, path: Path, importmode: Union[str, ImportMode], rootpath: Path
     ) -> None:
         if self._noconftest:
             return
 
-        directory = self._get_directory(path)
+        dirpath = self._get_directory(path)
 
-        # Optimization: avoid repeated searches in the same directory.
-        # Assumes always called with same importmode and rootpath.
-        if directory in self._dirpath2confmods:
+        # Already loaded.
+        if dirpath in self._dirpath2confmods:
             return
 
-        # XXX these days we may rather want to use config.rootpath
-        # and allow users to opt into looking into the rootdir parent
-        # directories instead of requiring to specify confcutdir.
-        clist = []
-        for parent in reversed((directory, *directory.parents)):
-            if self._is_in_confcutdir(parent):
-                conftestpath = parent / "conftest.py"
-                if conftestpath.is_file():
-                    mod = self._importconftest(conftestpath, importmode, rootpath)
-                    clist.append(mod)
-        self._dirpath2confmods[directory] = clist
+        conftestpath = dirpath / "conftest.py"
 
-    def _getconftestmodules(self, path: Path) -> Sequence[types.ModuleType]:
-        directory = self._get_directory(path)
-        return self._dirpath2confmods.get(directory, ())
+        # There is no conftest.py file.
+        if not conftestpath.is_file():
+            return
 
-    def _rget_with_confmod(
-        self,
-        name: str,
-        path: Path,
-    ) -> Tuple[types.ModuleType, Any]:
-        modules = self._getconftestmodules(path)
-        for mod in reversed(modules):
-            try:
-                return mod, getattr(mod, name)
-            except AttributeError:
-                continue
-        raise KeyError(name)
+        conftest_plugin_name = str(conftestpath)
 
-    def _importconftest(
-        self, conftestpath: Path, importmode: Union[str, ImportMode], rootpath: Path
-    ) -> types.ModuleType:
-        conftestpath_plugin_name = str(conftestpath)
-        existing = self.get_plugin(conftestpath_plugin_name)
-        if existing is not None:
-            return cast(types.ModuleType, existing)
+        # Already loaded 2. Probably shouldn't happen given previous check but
+        # just in case?
+        if self.has_plugin(conftest_plugin_name):
+            return
 
         # conftest.py files there are not in a Python package all have module
         # name "conftest", and thus conflict with each other. Clear the existing
@@ -660,20 +635,34 @@ class PytestPluginManager(PluginManager):
         self._check_non_top_pytest_plugins(mod, conftestpath)
 
         self._conftest_plugins.add(mod)
-        dirpath = conftestpath.parent
-        if dirpath in self._dirpath2confmods:
-            for path, mods in self._dirpath2confmods.items():
-                if dirpath in path.parents or path == dirpath:
-                    if mod in mods:
-                        raise AssertionError(
-                            f"While trying to load conftest path {str(conftestpath)}, "
-                            f"found that the module {mod} is already loaded with path {mod.__file__}. "
-                            "This is not supposed to happen. Please report this issue to pytest."
-                        )
-                    mods.append(mod)
+
+        dirpath_confmods = []
+        for parent in reversed(dirpath.parents):
+            mods = self._dirpath2confmods.get(parent)
+            if mods is not None:
+                dirpath_confmods.extend(mods)
+        dirpath_confmods.append(mod)
+        self._dirpath2confmods[dirpath] = dirpath_confmods
+
         self.trace(f"loading conftestmodule {mod!r}")
-        self.consider_conftest(mod, registration_name=conftestpath_plugin_name)
-        return mod
+        self.consider_conftest(mod, registration_name=conftest_plugin_name)
+
+    def _getconftestmodules(self, path: Path) -> Sequence[types.ModuleType]:
+        dirpath = self._get_directory(path)
+        return self._dirpath2confmods.get(dirpath, ())
+
+    def _rget_with_confmod(
+        self,
+        name: str,
+        path: Path,
+    ) -> Tuple[types.ModuleType, Any]:
+        modules = self._getconftestmodules(path)
+        for mod in reversed(modules):
+            try:
+                return mod, getattr(mod, name)
+            except AttributeError:
+                continue
+        raise KeyError(name)
 
     def _check_non_top_pytest_plugins(
         self,
