@@ -43,6 +43,7 @@ from _pytest._io.saferepr import saferepr
 from _pytest.compat import ascii_escaped
 from _pytest.compat import get_default_arg_names
 from _pytest.compat import get_real_func
+from _pytest.compat import getfuncargnames
 from _pytest.compat import getimfunc
 from _pytest.compat import getlocation
 from _pytest.compat import is_async_function
@@ -186,7 +187,7 @@ def pytest_pyfunc_call(pyfuncitem: "Function") -> Optional[object]:
     if is_async_function(testfunction):
         async_warn_and_skip(pyfuncitem.nodeid)
     funcargs = pyfuncitem.funcargs
-    testargs = {arg: funcargs[arg] for arg in pyfuncitem._fixtureinfo.argnames}
+    testargs = {arg: funcargs[arg] for arg in pyfuncitem.argnames}
     result = testfunction(**testargs)
     if hasattr(result, "__await__") or hasattr(result, "__aiter__"):
         async_warn_and_skip(pyfuncitem.nodeid)
@@ -1681,6 +1682,9 @@ class Function(PyobjMixin, nodes.Item):
 
     # Disable since functions handle it themselves.
     _ALLOW_MARKERS = False
+    # Marker to declare that funcargs are not supported.
+    # Can be set to true in sub-classes.
+    nofuncargs = False
 
     def __init__(
         self,
@@ -1725,9 +1729,15 @@ class Function(PyobjMixin, nodes.Item):
         if keywords:
             self.keywords.update(keywords)
 
+        if not self.nofuncargs:
+            argnames = getfuncargnames(self.obj, name=self.name, cls=self.cls)
+        else:
+            argnames = ()
+        self.argnames = argnames
+
         if fixtureinfo is None:
             fm = self.session._fixturemanager
-            fixtureinfo = fm.getfixtureinfo(self, self.obj, self.cls)
+            fixtureinfo = fm.getfixtureinfo(self, argnames=argnames)
         self._fixtureinfo: FuncFixtureInfo = fixtureinfo
         self.fixturenames = fixtureinfo.names_closure
         self._initrequest()

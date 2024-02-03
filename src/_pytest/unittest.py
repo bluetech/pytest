@@ -60,10 +60,6 @@ def pytest_pycollect_makeitem(
 
 
 class UnitTestCase(Class):
-    # Marker for fixturemanger.getfixtureinfo()
-    # to declare that our children do not support funcargs.
-    nofuncargs = True
-
     def collect(self) -> Iterable[Union[Item, Collector]]:
         from unittest import TestLoader
 
@@ -168,6 +164,7 @@ class UnitTestCase(Class):
 
 
 class TestCaseFunction(Function):
+    # Marker to declare that funcargs are not supported.
     nofuncargs = True
     _excinfo: Optional[List[_pytest._code.ExceptionInfo[BaseException]]] = None
     _testcase: Optional["unittest.TestCase"] = None

@@ -1440,8 +1440,10 @@ class FixtureManager:
     def getfixtureinfo(
         self,
         node: nodes.Item,
-        func: Optional[Callable[..., object]],
-        cls: Optional[type],
+        func: Optional[Callable[..., object]] = None,
+        cls: Optional[type] = None,
+        *,
+        argnames: Union[Tuple[str, ...], NotSetType] = NOTSET,
     ) -> FuncFixtureInfo:
         """Calculate the :class:`FuncFixtureInfo` for an item.
 
@@ -1450,15 +1452,23 @@ class FixtureManager:
 
         :param node:
             The item requesting the fixtures.
+        :param argnames:
+            Fixture names to request directly.
+            For standard function fixture definitions, this is the function's
+            parameter names, hence the name "argument names".
         :param func:
+            DEPRECATED: Pass argnames instead.
             The item's function.
         :param cls:
+            DEPRECATED: Pass argnames instead.
             If the function is a method, the method's class.
         """
-        if func is not None and not getattr(node, "nofuncargs", False):
-            argnames = getfuncargnames(func, name=node.name, cls=cls)
-        else:
-            argnames = ()
+        if argnames is NOTSET:
+            DEPRECATED
+            if func is not None and not getattr(node, "nofuncargs", False):
+                argnames = getfuncargnames(func, name=node.name, cls=cls)
+            else:
+                argnames = ()
         usefixturesnames = self._getusefixturesnames(node)
         autousenames = self._getautousenames(node)
         initialnames = deduplicate_names(autousenames, usefixturesnames, argnames)
