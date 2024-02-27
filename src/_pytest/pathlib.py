@@ -648,7 +648,14 @@ def module_name_from_path(path: Path, root: Path) -> str:
     if len(path_parts) >= 2 and path_parts[-1] == "__init__":
         path_parts = path_parts[:-1]
 
-    return ".".join(path_parts)
+    module_name = ".".join(path_parts)
+    # Modules starting with "." are considered relative, but given we
+    # are returning a made-up path that is intended to be imported as a global package and
+    # not as a relative module, replace the "." at the start with "_", which should be enough
+    # for our purposes.
+    if module_name.startswith("."):
+        module_name = "_" + module_name[1:]
+    return module_name
 
 
 def insert_missing_modules(modules: Dict[str, ModuleType], module_name: str) -> None:
