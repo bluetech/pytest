@@ -302,10 +302,10 @@ class PyobjMixin(nodes.Node):
         """Python instance object the function is bound to.
 
         Returns None if not a test method, e.g. for a standalone test function,
-        a staticmethod, a class or a module.
+        a class or a module.
         """
-        node = self.getparent(Function)
-        return getattr(node.obj, "__self__", None) if node is not None else None
+        # Overridden by Function.
+        return None
 
     @property
     def obj(self):
@@ -1752,12 +1752,31 @@ class Function(PyobjMixin, nodes.Item):
         """Underlying python 'function' object."""
         return getimfunc(self.obj)
 
-    def _getobj(self):
-        assert self.parent is not None
+    @property
+    def instance(self):
+        try:
+            return self._instance
+        except AttributeError:
+            if isinstance(self.parent, Class):
+                # Each Function gets a fresh class instance.
+                self._instance: Optional[Any] = self._getinstance()
+            else:
+                self._instance = None
+        return self._instance
+
+    def _getinstance(self):
         if isinstance(self.parent, Class):
             # Each Function gets a fresh class instance.
-            parent_obj = self.parent.newinstance()
+            return self.parent.newinstance()
         else:
+            return None
+
+    def _getobj(self):
+        instance = self.instance
+        if instance is not None:
+            parent_obj = instance
+        else:
+            assert self.parent is not None
             parent_obj = self.parent.obj  # type: ignore[attr-defined]
         return getattr(parent_obj, self.originalname)
 
