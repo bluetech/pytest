@@ -9,6 +9,13 @@ from _pytest.pytester import Pytester
 import pytest
 
 
+pytest.importorskip(
+    "faulthandler",
+    reason="faulthandler cannot be imported in subinterpreters",
+    exc_type=ImportError,
+)
+
+
 def test_enabled(pytester: Pytester) -> None:
     """Test single crashing test displays a traceback."""
     pytester.makepyfile(

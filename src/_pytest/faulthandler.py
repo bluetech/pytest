@@ -25,6 +25,13 @@ def pytest_addoption(parser: Parser) -> None:
 
 
 def pytest_configure(config: Config) -> None:
+    # faulthandler cannot be imported in subinterpreters.
+    # Skip the plugin if can't import it.
+    try:
+        import faulthandler  # noqa: F401
+    except ImportError:
+        return  # pragma: nocover
+
     plugin = FaulthandlerPlugin(config)
     config.pluginmanager.register(plugin, "faulthandler-plugin")
 
