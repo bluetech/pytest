@@ -5,14 +5,8 @@ import os
 import sys
 
 from _pytest.config import Config
+from _pytest.config import hookimpl
 from _pytest.config.argparsing import Parser
-from _pytest.nodes import Item
-from _pytest.stash import StashKey
-import pytest
-
-
-fault_handler_original_stderr_fd_key = StashKey[int]()
-fault_handler_stderr_fd_key = StashKey[int]()
 
 
 def pytest_addoption(parser: Parser) -> None:
@@ -31,32 +25,8 @@ def pytest_addoption(parser: Parser) -> None:
 
 
 def pytest_configure(config: Config) -> None:
-    import faulthandler
-
-    # at teardown we want to restore the original faulthandler fileno
-    # but faulthandler has no api to return the original fileno
-    # so here we stash the stderr fileno to be used at teardown
-    # sys.stderr and sys.__stderr__ may be closed or patched during the session
-    # so we can't rely on their values being good at that point (#11572).
-    stderr_fileno = get_stderr_fileno()
-    if faulthandler.is_enabled():
-        config.stash[fault_handler_original_stderr_fd_key] = stderr_fileno
-    config.stash[fault_handler_stderr_fd_key] = os.dup(stderr_fileno)
-    faulthandler.enable(file=config.stash[fault_handler_stderr_fd_key])
-
-
-def pytest_unconfigure(config: Config) -> None:
-    import faulthandler
-
-    faulthandler.disable()
-    # Close the dup file installed during pytest_configure.
-    if fault_handler_stderr_fd_key in config.stash:
-        os.close(config.stash[fault_handler_stderr_fd_key])
-        del config.stash[fault_handler_stderr_fd_key]
-    # Re-enable the faulthandler if it was originally enabled.
-    if fault_handler_original_stderr_fd_key in config.stash:
-        faulthandler.enable(config.stash[fault_handler_original_stderr_fd_key])
-        del config.stash[fault_handler_original_stderr_fd_key]
+    plugin = FaulthandlerPlugin(config)
+    config.pluginmanager.register(plugin, "faulthandler-plugin")
 
 
 def get_stderr_fileno() -> int:
@@ -75,45 +45,65 @@ def get_stderr_fileno() -> int:
         return sys.__stderr__.fileno()
 
 
-def get_timeout_config_value(config: Config) -> float:
-    return float(config.getini("faulthandler_timeout") or 0.0)
-
-
-def get_exit_on_timeout_config_value(config: Config) -> bool:
-    exit_on_timeout = config.getini("faulthandler_exit_on_timeout")
-    assert isinstance(exit_on_timeout, bool)
-    return exit_on_timeout
-
-
-@pytest.hookimpl(wrapper=True, trylast=True)
-def pytest_runtest_protocol(item: Item) -> Generator[None, object, object]:
-    timeout = get_timeout_config_value(item.config)
-    exit_on_timeout = get_exit_on_timeout_config_value(item.config)
-    if timeout > 0:
+class FaulthandlerPlugin:
+    def __init__(self, config: Config) -> None:
         import faulthandler
 
-        stderr = item.config.stash[fault_handler_stderr_fd_key]
-        faulthandler.dump_traceback_later(timeout, file=stderr, exit=exit_on_timeout)
-        try:
+        self.config = config
+
+        # at teardown we want to restore the original faulthandler fileno
+        # but faulthandler has no api to return the original fileno
+        # so here we stash the stderr fileno to be used at teardown
+        # sys.stderr and sys.__stderr__ may be closed or patched during the session
+        # so we can't rely on their values being good at that point (#11572).
+        stderr_fileno = get_stderr_fileno()
+
+        if not faulthandler.is_enabled():
+            self.original_stderr_fd = None
+        else:
+            self.original_stderr_fd = stderr_fileno
+        self.stderr_fd = os.dup(stderr_fileno)
+        faulthandler.enable(file=self.stderr_fd)
+
+    def pytest_unconfigure(self) -> None:
+        import faulthandler
+
+        faulthandler.disable()
+        # Close the dup file installed during pytest_configure (__init__).
+        if self.stderr_fd is not None:
+            os.close(self.stderr_fd)
+        # Re-enable the faulthandler if it was originally enabled.
+        if self.original_stderr_fd is not None:
+            faulthandler.enable(self.original_stderr_fd)
+
+    @hookimpl(wrapper=True, trylast=True)
+    def pytest_runtest_protocol(self) -> Generator[None, object, object]:
+        timeout = float(self.config.getini("faulthandler_timeout"))
+        exit_on_timeout: bool = self.config.getini("faulthandler_exit_on_timeout")
+        if timeout > 0:
+            import faulthandler
+
+            faulthandler.dump_traceback_later(
+                timeout, file=self.stderr_fd, exit=exit_on_timeout
+            )
+            try:
+                return (yield)
+            finally:
+                faulthandler.cancel_dump_traceback_later()
+        else:
             return (yield)
-        finally:
-            faulthandler.cancel_dump_traceback_later()
-    else:
-        return (yield)
 
+    @hookimpl(tryfirst=True)
+    def pytest_enter_pdb(self) -> None:
+        """Cancel any traceback dumping due to timeout before entering pdb."""
+        import faulthandler
 
-@pytest.hookimpl(tryfirst=True)
-def pytest_enter_pdb() -> None:
-    """Cancel any traceback dumping due to timeout before entering pdb."""
-    import faulthandler
+        faulthandler.cancel_dump_traceback_later()
 
-    faulthandler.cancel_dump_traceback_later()
+    @hookimpl(tryfirst=True)
+    def pytest_exception_interact(self) -> None:
+        """Cancel any traceback dumping due to an interactive exception being
+        raised."""
+        import faulthandler
 
-
-@pytest.hookimpl(tryfirst=True)
-def pytest_exception_interact() -> None:
-    """Cancel any traceback dumping due to an interactive exception being
-    raised."""
-    import faulthandler
-
-    faulthandler.cancel_dump_traceback_later()
+        faulthandler.cancel_dump_traceback_later()
