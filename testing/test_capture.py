@@ -1721,7 +1721,11 @@ def test_libedit_workaround(pytester: Pytester) -> None:
 
         capture.resume_global_capture()
     """)
-    readline = pytest.importorskip("readline")
+    readline = pytest.importorskip(
+        "readline",
+        # `readline` can't be imported in sub-interpreters, raises an ImportError.
+        exc_type=ImportError,
+    )
     backend = getattr(readline, "backend", readline.__doc__)  # added in Python 3.13
     print(f"Readline backend: {backend}")
 
