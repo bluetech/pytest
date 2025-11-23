@@ -822,7 +822,10 @@ class Session(nodes.Collector):
 
             if not self.config.getoption("keepduplicates"):
                 # Normalize the collection arguments -- remove duplicates and overlaps.
-                self._initial_parts = normalize_collection_arguments(collection_args)
+                norecursedirs: Sequence[str] = self.config.getini("norecursedirs")
+                self._initial_parts = normalize_collection_arguments(
+                    collection_args, norecursedirs
+                )
             else:
                 self._initial_parts = collection_args
 
@@ -1151,7 +1154,9 @@ def resolve_collection_argument(
 
 
 def is_collection_argument_subsumed_by(
-    arg: CollectionArgument, by: CollectionArgument
+    arg: CollectionArgument,
+    by: CollectionArgument,
+    norecursedirs: Sequence[str],
 ) -> bool:
     """Check if `arg` is subsumed (contained) by `by`."""
     # First check path subsumption.
@@ -1159,7 +1164,11 @@ def is_collection_argument_subsumed_by(
         # `by` subsumes `arg` if `by` is a parent directory of `arg` and has no
         # parts (collects everything in that directory).
         if not by.parts:
-            return arg.path.is_relative_to(by.path)
+            if not arg.path.is_relative_to(by.path):
+                return False
+            if any(fnmatch_ex(pat, str(by.path)) for pat in norecursedirs):
+                return False
+            return True
         return False
     # Paths are equal, check parts.
     # For example: ("TestClass",) is a prefix of ("TestClass", "test_method").
@@ -1176,6 +1185,7 @@ def is_collection_argument_subsumed_by(
 
 def normalize_collection_arguments(
     collection_args: Sequence[CollectionArgument],
+    norecursedirs: Sequence[str],
 ) -> list[CollectionArgument]:
     """Normalize collection arguments to eliminate overlapping paths and parts.
 
@@ -1195,7 +1205,9 @@ def normalize_collection_arguments(
     normalized: list[CollectionArgument] = []
     last_kept = None
     for arg in collection_args_sorted:
-        if last_kept is None or not is_collection_argument_subsumed_by(arg, last_kept):
+        if last_kept is None or not is_collection_argument_subsumed_by(
+            arg, last_kept, norecursedirs
+        ):
             normalized.append(arg)
             last_kept = arg
     normalized.sort(key=lambda arg: arg.original_index)
