@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 
 from _pytest._code.code import ExceptionChainRepr
 from _pytest._code.code import ExceptionRepr
@@ -353,6 +355,14 @@ class TestReportSerialization:
         from subprocess to main process creates an artificial exception, which ExceptionInfo
         can't obtain the ReprFileLocation from.
         """
+        # Not support in subinterpreters.
+        # https://github.com/python/cpython/issues/140057
+        try:
+            with ProcessPoolExecutor() as p:
+                p.submit(lambda: None).result()
+        except BrokenProcessPool:
+            pytest.skip("multiprocessing not supported in subinterpreters")
+
         pytester.makepyfile(
             """
             from concurrent.futures import ProcessPoolExecutor

@@ -867,8 +867,16 @@ class TestLocalPath(CommonFSTests):
         reason="#11603", raises=(error.EEXIST, error.ENOENT), strict=False
     )
     def test_make_numbered_dir_multiprocess_safe(self, tmpdir):
+        try:
+            pool = multiprocessing.Pool()
+        except RuntimeError as e:
+            # https://github.com/python/cpython/issues/140057
+            if "interpreter" in str(e):
+                pytest.skip("multiprocessing not supported in subinterpreters")
+            raise
+
         # https://github.com/pytest-dev/py/issues/30
-        with multiprocessing.Pool() as pool:
+        with pool:
             results = [
                 pool.apply_async(batch_make_numbered_dirs, [tmpdir, 100])
                 for _ in range(20)

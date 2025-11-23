@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import MutableSequence
+import multiprocessing
 import sys
 import textwrap
 from typing import Any
@@ -1780,6 +1781,15 @@ def test_traceback_failure(pytester: Pytester) -> None:
 
 def test_exception_handling_no_traceback(pytester: Pytester) -> None:
     """Handle chain exceptions in tasks submitted by the multiprocess module (#1984)."""
+    try:
+        with multiprocessing.Pool():
+            pass
+    except RuntimeError as e:
+        # https://github.com/python/cpython/issues/140057
+        if "interpreter" in str(e):
+            pytest.skip("multiprocessing not supported in subinterpreters")
+        raise
+
     p1 = pytester.makepyfile(
         """
         from multiprocessing import Pool
