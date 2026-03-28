@@ -468,8 +468,6 @@ class PytestPluginManager(PluginManager):
 
         # Config._consider_importhook will set a real object if required.
         self.rewrite_hook: RewriteHook = DummyRewriteHook()
-        # Used to know when we are importing conftests after the pytest_configure stage.
-        self._configured = False
 
     def parse_hookimpl_opts(
         self, plugin: _PluggyPlugin, name: str
@@ -560,7 +558,6 @@ class PytestPluginManager(PluginManager):
             "plugin machinery will try to call it last/as late as possible. "
             "DEPRECATED, use @pytest.hookimpl(trylast=True) instead.",
         )
-        self._configured = True
 
     #
     # Internal API for local conftest plugin handling.
@@ -617,6 +614,7 @@ class PytestPluginManager(PluginManager):
                 importmode,
                 rootpath,
                 consider_namespace_packages=consider_namespace_packages,
+                initial=True,
             )
 
     def _is_in_confcutdir(self, path: pathlib.Path) -> bool:
@@ -641,6 +639,7 @@ class PytestPluginManager(PluginManager):
         rootpath: pathlib.Path,
         *,
         consider_namespace_packages: bool,
+        initial: bool = False,
     ) -> None:
         if self._noconftest:
             return
@@ -662,6 +661,7 @@ class PytestPluginManager(PluginManager):
                         importmode,
                         rootpath,
                         consider_namespace_packages=consider_namespace_packages,
+                        initial=initial,
                     )
                     clist.append(mod)
         self._dirpath2confmods[directory] = clist
@@ -690,6 +690,7 @@ class PytestPluginManager(PluginManager):
         rootpath: pathlib.Path,
         *,
         consider_namespace_packages: bool,
+        initial: bool = False,
     ) -> types.ModuleType:
         conftestpath_plugin_name = str(conftestpath)
         existing = self.get_plugin(conftestpath_plugin_name)
@@ -718,7 +719,8 @@ class PytestPluginManager(PluginManager):
             assert e.__traceback__ is not None
             raise ConftestImportFailure(conftestpath, cause=e) from e
 
-        self._check_non_top_pytest_plugins(mod, conftestpath)
+        if not initial:
+            self._check_non_initial_pytest_plugins(mod, conftestpath)
 
         self._conftest_plugins.add(mod)
         dirpath = conftestpath.parent
@@ -736,16 +738,12 @@ class PytestPluginManager(PluginManager):
         self.consider_conftest(mod, registration_name=conftestpath_plugin_name)
         return mod
 
-    def _check_non_top_pytest_plugins(
+    def _check_non_initial_pytest_plugins(
         self,
         mod: types.ModuleType,
         conftestpath: pathlib.Path,
     ) -> None:
-        if (
-            hasattr(mod, "pytest_plugins")
-            and self._configured
-            and not self._using_pyargs
-        ):
+        if hasattr(mod, "pytest_plugins") and not self._using_pyargs:
             msg = (
                 "Defining 'pytest_plugins' in a non-top-level conftest is no longer supported:\n"
                 "It affects the entire test suite instead of just below the conftest as expected.\n"

@@ -446,7 +446,7 @@ def test_conftest_import_order(pytester: Pytester, monkeypatch: MonkeyPatch) -> 
     ct2 = sub / "conftest.py"
     ct2.write_text("", encoding="utf-8")
 
-    def impct(p, importmode, root, consider_namespace_packages):
+    def impct(p, importmode, root, consider_namespace_packages, initial):
         return p
 
     conftest = PytestPluginManager()
