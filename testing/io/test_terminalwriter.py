@@ -11,6 +11,7 @@ import shutil
 import sys
 from unittest import mock
 
+from ..helpers import ColorMapping
 from _pytest._io import terminalwriter
 from _pytest.monkeypatch import MonkeyPatch
 import pytest
@@ -295,7 +296,12 @@ class TestTerminalWriterLineWidth:
         ),
     ],
 )
-def test_code_highlight(has_markup, code_highlight, expected, color_mapping):
+def test_code_highlight(
+    has_markup: bool,
+    code_highlight: bool,
+    expected: str,
+    color_mapping: ColorMapping,
+) -> None:
     f = io.StringIO()
     tw = terminalwriter.TerminalWriter(f)
     tw.hasmarkup = has_markup

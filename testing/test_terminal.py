@@ -16,6 +16,7 @@ from unittest import mock
 
 import pluggy
 
+from .helpers import ColorMapping
 from _pytest._io.wcwidth import wcswidth
 import _pytest.config
 from _pytest.config import Config
@@ -356,7 +357,11 @@ class TestTerminal:
 
     @pytest.mark.parametrize("category", ["foo", "failed", "error", "passed"])
     def test_report_teststatus_explicit_markup(
-        self, monkeypatch: MonkeyPatch, pytester: Pytester, color_mapping, category: str
+        self,
+        monkeypatch: MonkeyPatch,
+        pytester: Pytester,
+        color_mapping: ColorMapping,
+        category: str,
     ) -> None:
         """Test that TerminalReporter handles markup explicitly provided by
         a pytest_report_teststatus hook."""
@@ -1311,7 +1316,7 @@ def test_pass_output_reporting(pytester: Pytester) -> None:
     )
 
 
-def test_color_yes(pytester: Pytester, color_mapping) -> None:
+def test_color_yes(pytester: Pytester, color_mapping: ColorMapping) -> None:
     p1 = pytester.makepyfile(
         """
         def fail():
@@ -2169,7 +2174,10 @@ class TestProgressOutputStyle:
         )
 
     def test_colored_progress(
-        self, pytester: Pytester, monkeypatch, color_mapping
+        self,
+        pytester: Pytester,
+        monkeypatch: MonkeyPatch,
+        color_mapping: ColorMapping,
     ) -> None:
         monkeypatch.setenv("PY_COLORS", "1")
         pytester.makepyfile(
@@ -2494,7 +2502,7 @@ class TestProgressWithTeardown:
         )
 
     def test_teardown_many_verbose(
-        self, pytester: Pytester, many_files, color_mapping
+        self, pytester: Pytester, many_files: None, color_mapping: ColorMapping
     ) -> None:
         result = pytester.runpytest("-v")
         result.stdout.fnmatch_lines(
@@ -2785,7 +2793,9 @@ def test_via_exec(pytester: Pytester) -> None:
 
 
 class TestCodeHighlight:
-    def test_code_highlight_simple(self, pytester: Pytester, color_mapping) -> None:
+    def test_code_highlight_simple(
+        self, pytester: Pytester, color_mapping: ColorMapping
+    ) -> None:
         pytester.makepyfile(
             """
             def test_foo():
@@ -2804,7 +2814,7 @@ class TestCodeHighlight:
         )
 
     def test_code_highlight_continuation(
-        self, pytester: Pytester, color_mapping
+        self, pytester: Pytester, color_mapping: ColorMapping
     ) -> None:
         pytester.makepyfile(
             """
@@ -2827,7 +2837,7 @@ class TestCodeHighlight:
         )
 
     def test_code_highlight_custom_theme(
-        self, pytester: Pytester, color_mapping, monkeypatch: MonkeyPatch
+        self, pytester: Pytester, color_mapping: ColorMapping, monkeypatch: MonkeyPatch
     ) -> None:
         pytester.makepyfile(
             """
@@ -2849,7 +2859,7 @@ class TestCodeHighlight:
         )
 
     def test_code_highlight_invalid_theme(
-        self, pytester: Pytester, color_mapping, monkeypatch: MonkeyPatch
+        self, pytester: Pytester, color_mapping: ColorMapping, monkeypatch: MonkeyPatch
     ) -> None:
         pytester.makepyfile(
             """
@@ -2865,7 +2875,7 @@ class TestCodeHighlight:
         )
 
     def test_code_highlight_invalid_theme_mode(
-        self, pytester: Pytester, color_mapping, monkeypatch: MonkeyPatch
+        self, pytester: Pytester, color_mapping: ColorMapping, monkeypatch: MonkeyPatch
     ) -> None:
         pytester.makepyfile(
             """

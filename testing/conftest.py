@@ -2,12 +2,9 @@
 from __future__ import annotations
 
 from collections.abc import Generator
-import importlib.metadata
-import re
 import sys
 
-from packaging.version import Version
-
+from .helpers import ColorMapping
 from _pytest.monkeypatch import MonkeyPatch
 from _pytest.pytester import Pytester
 import pytest
@@ -164,59 +161,13 @@ def pytester(pytester: Pytester, monkeypatch: MonkeyPatch) -> Pytester:
 
 
 @pytest.fixture(scope="session")
-def color_mapping():
+def color_mapping() -> ColorMapping:
     """Returns a utility class which can replace keys in strings in the form "{NAME}"
     by their equivalent ASCII codes in the terminal.
 
     Used by tests which check the actual colors output by pytest.
     """
-    # https://github.com/pygments/pygments/commit/d24e272894a56a98b1b718d9ac5fabc20124882a
-    pygments_version = Version(importlib.metadata.version("pygments"))
-    pygments_has_kwspace_hl = pygments_version >= Version("2.19")
-
-    class ColorMapping:
-        COLORS = {
-            "red": "\x1b[31m",
-            "green": "\x1b[32m",
-            "yellow": "\x1b[33m",
-            "light-gray": "\x1b[90m",
-            "light-red": "\x1b[91m",
-            "light-green": "\x1b[92m",
-            "bold": "\x1b[1m",
-            "reset": "\x1b[0m",
-            "kw": "\x1b[94m",
-            "kwspace": "\x1b[90m \x1b[39;49;00m" if pygments_has_kwspace_hl else " ",
-            "hl-reset": "\x1b[39;49;00m",
-            "function": "\x1b[92m",
-            "number": "\x1b[94m",
-            "str": "\x1b[33m",
-            "print": "\x1b[96m",
-            "endline": "\x1b[90m\x1b[39;49;00m",
-        }
-        RE_COLORS = {k: re.escape(v) for k, v in COLORS.items()}
-        NO_COLORS = {k: "" for k in COLORS.keys()}
-
-        @classmethod
-        def format(cls, lines: list[str]) -> list[str]:
-            """Straightforward replacement of color names to their ASCII codes."""
-            return [line.format(**cls.COLORS) for line in lines]
-
-        @classmethod
-        def format_for_fnmatch(cls, lines: list[str]) -> list[str]:
-            """Replace color names for use with LineMatcher.fnmatch_lines"""
-            return [line.format(**cls.COLORS).replace("[", "[[]") for line in lines]
-
-        @classmethod
-        def format_for_rematch(cls, lines: list[str]) -> list[str]:
-            """Replace color names for use with LineMatcher.re_match_lines"""
-            return [line.format(**cls.RE_COLORS) for line in lines]
-
-        @classmethod
-        def strip_colors(cls, lines: list[str]) -> list[str]:
-            """Entirely remove every color code"""
-            return [line.format(**cls.NO_COLORS) for line in lines]
-
-    return ColorMapping
+    return ColorMapping()
 
 
 @pytest.fixture

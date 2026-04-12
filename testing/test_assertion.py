@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import MutableSequence
+from collections.abc import Sequence
 import sys
 import textwrap
 from typing import Any
@@ -9,6 +10,7 @@ from typing import NamedTuple
 
 import attr
 
+from .helpers import ColorMapping
 from _pytest import outcomes
 import _pytest.assertion as plugin
 from _pytest.assertion import truncate
@@ -2094,7 +2096,11 @@ def test_reprcompare_verbose_long() -> None:
     ),
 )
 def test_comparisons_handle_colors(
-    pytester: Pytester, color_mapping, enable_colors, test_code, expected_lines
+    pytester: Pytester,
+    color_mapping: ColorMapping,
+    enable_colors: bool,
+    test_code: str,
+    expected_lines: Sequence[str],
 ) -> None:
     p = pytester.makepyfile(test_code)
     result = pytester.runpytest(
