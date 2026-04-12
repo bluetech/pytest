@@ -10,11 +10,14 @@ from typing import final
 from typing import Literal
 from typing import TextIO
 
-import pygments
+from pygments.formatter import Formatter
 from pygments.formatters.terminal import TerminalFormatter
+from pygments.formatters.terminal256 import Terminal256Formatter
+from pygments.formatters.terminal256 import TerminalTrueColorFormatter
 from pygments.lexer import Lexer
 from pygments.lexers.diff import DiffLexer
 from pygments.lexers.python import PythonLexer
+import pygments.util
 
 from ..compat import assert_never
 from .wcwidth import wcswidth
@@ -213,23 +216,40 @@ class TerminalWriter:
         else:
             assert_never(lexer)
 
-    def _get_pygments_formatter(self) -> TerminalFormatter:
+    def _get_pygments_formatter(self) -> Formatter:
         from _pytest.config.exceptions import UsageError
 
-        theme = os.getenv("PYTEST_THEME")
         theme_mode = os.getenv("PYTEST_THEME_MODE", "dark")
+        if theme_mode not in ("dark", "light"):
+            raise UsageError(
+                f"PYTEST_THEME_MODE environment variable has an invalid value: '{theme_mode}'. "
+                "The allowed values are 'dark' (default) and 'light'."
+            )
 
+        theme = os.getenv("PYTEST_THEME")
         try:
-            return TerminalFormatter(bg=theme_mode, style=theme)
+            if os.environ.get("COLORTERM", "") in ("truecolor", "24bit"):
+                if theme is None:
+                    if theme_mode == "dark":
+                        theme = "native"
+                    else:
+                        theme = "tango"
+                return TerminalTrueColorFormatter(style=theme)
+            elif "256" in os.environ.get("TERM", ""):
+                if theme is None:
+                    if theme_mode == "dark":
+                        theme = "native"
+                    else:
+                        theme = "tango"
+                return Terminal256Formatter(style=theme)
+            else:
+                if theme is None:
+                    theme = "default"
+                return TerminalFormatter(bg=theme_mode, style=theme)
         except pygments.util.ClassNotFound as e:
             raise UsageError(
                 f"PYTEST_THEME environment variable has an invalid value: '{theme}'. "
                 "Hint: See available pygments styles with `pygmentize -L styles`."
-            ) from e
-        except pygments.util.OptionError as e:
-            raise UsageError(
-                f"PYTEST_THEME_MODE environment variable has an invalid value: '{theme_mode}'. "
-                "The allowed values are 'dark' (default) and 'light'."
             ) from e
 
     def _highlight(
