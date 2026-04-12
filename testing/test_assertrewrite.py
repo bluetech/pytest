@@ -2397,10 +2397,10 @@ class TestSafereprUnbounded:
         obj = self.Help()
         # using id() to fetch memory address fails on different platforms
         pattern = re.compile(
-            rf"<{Path(__file__).stem}.{self.__class__.__name__}.Help object at 0x[0-9a-fA-F]*>",
+            r"<testing.test_assertrewrite.TestSafereprUnbounded.Help.object at 0x[0-9a-fA-F]*>",
         )
         assert pattern.match(_saferepr(obj))
         assert (
             _saferepr(self.Help)
-            == f"<class '{Path(__file__).stem}.{self.__class__.__name__}.Help'>"
+            == "<class 'testing.test_assertrewrite.TestSafereprUnbounded.Help'>"
         )

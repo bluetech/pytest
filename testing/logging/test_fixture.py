@@ -202,8 +202,12 @@ def test_with_statement_filtering(caplog: pytest.LogCaptureFixture) -> None:
         logger.info("handler call")
 
     filtered_tuple, unfiltered_tuple = caplog.record_tuples
-    assert filtered_tuple == ("test_fixture", 20, "filtered handler call")
-    assert unfiltered_tuple == ("test_fixture", 20, "handler call")
+    assert filtered_tuple == (
+        "testing.logging.test_fixture",
+        20,
+        "filtered handler call",
+    )
+    assert unfiltered_tuple == ("testing.logging.test_fixture", 20, "handler call")
 
 
 @pytest.mark.parametrize(

@@ -337,7 +337,7 @@ class TestRaises:
 
         with pytest.raises(
             Failed,
-            match=r"DID NOT RAISE <class 'raises(\..*)*ClassLooksIterableException'>",
+            match=r"DID NOT RAISE <class 'testing\.python\.raises(\..*)*ClassLooksIterableException'>",
         ):
             with pytest.raises(ClassLooksIterableException):
                 ...  # pragma: no cover
