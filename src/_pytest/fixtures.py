@@ -46,7 +46,6 @@ from _pytest.compat import getfuncargnames
 from _pytest.compat import getimfunc
 from _pytest.compat import getlocation
 from _pytest.compat import NOTSET
-from _pytest.compat import NotSetType
 from _pytest.compat import safe_getattr
 from _pytest.compat import safe_isclass
 from _pytest.compat import signature
@@ -1671,7 +1670,7 @@ class FixtureManager:
         else:
             nodeid = None
 
-        self.parsefactories(plugin, nodeid)
+        self.parsefactories(node=nodeid, holder=plugin)
 
     def _getautousenames(self, node: nodes.Node) -> Iterator[str]:
         """Return the names of autouse fixtures applicable to node."""
@@ -1798,7 +1797,7 @@ class FixtureManager:
         *,
         name: str,
         func: _FixtureFunc[object],
-        nodeid: str | None,
+        node: nodes.Node | None,
         scope: Scope | ScopeName | Callable[[str, Config], ScopeName] = "function",
         params: Sequence[object] | None = None,
         ids: tuple[object | None, ...] | Callable[[Any], object | None] | None = None,
@@ -1824,6 +1823,7 @@ class FixtureManager:
         :param autouse:
             Whether this is an autouse fixture.
         """
+        nodeid = node.nodeid if node is not None else None
         fixture_def = FixtureDef(
             config=self.config,
             baseid=nodeid,
@@ -1849,61 +1849,36 @@ class FixtureManager:
         if autouse:
             self._nodeid_autousenames.setdefault(nodeid or "", []).append(name)
 
-    @overload
     def parsefactories(
         self,
-        node_or_obj: nodes.Node,
+        *,
+        node: nodes.Node | None,
+        holder: object,
     ) -> None:
-        raise NotImplementedError()
-
-    @overload
-    def parsefactories(
-        self,
-        node_or_obj: object,
-        nodeid: str | None,
-    ) -> None:
-        raise NotImplementedError()
-
-    def parsefactories(
-        self,
-        node_or_obj: nodes.Node | object,
-        nodeid: str | NotSetType | None = NOTSET,
-    ) -> None:
-        """Collect fixtures from a collection node or object.
+        """Collect fixtures from a holder object.
 
         Found fixtures are parsed into `FixtureDef`s and saved.
 
-        If `node_or_object` is a collection node (with an underlying Python
-        object), the node's object is traversed and the node's nodeid is used to
-        determine the fixtures' visibility. `nodeid` must not be specified in
-        this case.
-
-        If `node_or_object` is an object (e.g. a plugin), the object is
-        traversed and the given `nodeid` is used to determine the fixtures'
-        visibility. `nodeid` must be specified in this case; None and "" mean
-        total visibility.
+        :param node:
+            Determines the fixtures' visibility.
+            If None, the fixtures will have global visibility.
+        :param holder:
+            The object in which to look for fixtures.
         """
-        if nodeid is not NOTSET:
-            holderobj = node_or_obj
-        else:
-            assert isinstance(node_or_obj, nodes.Node)
-            holderobj = cast(object, node_or_obj.obj)  # type: ignore[attr-defined]
-            assert isinstance(node_or_obj.nodeid, str)
-            nodeid = node_or_obj.nodeid
-        if holderobj in self._holderobjseen:
+        if holder in self._holderobjseen:
             return
 
         # Avoid accessing `@property` (and other descriptors) when iterating fixtures.
-        if not safe_isclass(holderobj) and not isinstance(holderobj, types.ModuleType):
-            holderobj_tp: object = type(holderobj)
+        if not safe_isclass(holder) and not isinstance(holder, types.ModuleType):
+            holder_tp: object = type(holder)
         else:
-            holderobj_tp = holderobj
+            holder_tp = holder
 
-        self._holderobjseen.add(holderobj)
-        for name in dir(holderobj):
+        self._holderobjseen.add(holder)
+        for name in dir(holder):
             # The attribute can be an arbitrary descriptor, so the attribute
             # access below can raise. safe_getattr() ignores such exceptions.
-            obj_ub = safe_getattr(holderobj_tp, name, None)
+            obj_ub = safe_getattr(holder_tp, name, None)
             if type(obj_ub) is FixtureFunctionDefinition:
                 marker = obj_ub._fixture_function_marker
                 if marker.name:
@@ -1913,7 +1888,7 @@ class FixtureManager:
 
                 # OK we know it is a fixture -- now safe to look up on the _instance_.
                 try:
-                    obj = getattr(holderobj, name)
+                    obj = getattr(holder, name)
                 # if the fixture is named in the decorator we cannot find it in the module
                 except AttributeError:
                     obj = obj_ub
@@ -1922,7 +1897,7 @@ class FixtureManager:
 
                 self._register_fixture(
                     name=fixture_name,
-                    nodeid=nodeid,
+                    node=node,
                     func=func,
                     scope=marker.scope,
                     params=marker.params,
