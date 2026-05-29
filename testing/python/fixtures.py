@@ -1903,6 +1903,35 @@ class TestFixtureManagerParseFactories:
         reprec = pytester.inline_run("-s")
         reprec.assertoutcome(passed=1)
 
+    def test_register_fixture_ordered_by_visibility(self, pytester: Pytester) -> None:
+        """A fixturedef registered for a more specific node takes precedence
+        over one registered for a more general (ancestor) node, regardless of
+        the order in which they were registered (#14513)."""
+        pytester.makeconftest(
+            """
+            import pytest
+
+            @pytest.hookimpl(wrapper=True)
+            def pytest_collection(session):
+                result = yield
+                fm = session._fixturemanager
+                item = session.items[0]
+                fm._register_fixture(name="fix", func=lambda: "session1", node=session)
+                fm._register_fixture(name="fix", func=lambda fix: f"item1-{fix}", node=item)
+                fm._register_fixture(name="fix", func=lambda fix: f"item2-{fix}", node=item)
+                fm._register_fixture(name="fix", func=lambda: "session2", node=session)
+                return result
+            """
+        )
+        pytester.makepyfile(
+            """
+            def test(fix):
+                assert fix == "item2-item1-session2"
+            """
+        )
+        reprec = pytester.inline_run()
+        reprec.assertoutcome(passed=1)
+
     def test_parsefactories_relative_node_ids(
         self, pytester: Pytester, monkeypatch: MonkeyPatch
     ) -> None:
