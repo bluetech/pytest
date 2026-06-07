@@ -1189,8 +1189,29 @@ class ExceptionInfoFormatter:
 
         return traceback, extraline
 
+    def repr_traceback_group(
+        self, excinfo: ExceptionInfo[BaseExceptionGroup]
+    ) -> ReprTracebackGroup:
+        # TODO
+        reprtraceback = self.repr_traceback(excinfo)
+        reprexceptions = []
+        for exception in excinfo.value.exceptions:
+            if isinstance(exception, BaseExceptionGroup):
+                reprexception = self.repr_traceback_group(
+                    ExceptionInfo.from_exception(exception)
+                )
+            else:
+                reprexception = self.repr_traceback(
+                    ExceptionInfo.from_exception(exception)
+                )
+            reprexceptions.append(reprexception)
+        return ReprTracebackGroup(
+            reprtraceback=reprtraceback,
+            reprexceptions=reprexceptions,
+        )
+
     def repr_excinfo(self, excinfo: ExceptionInfo[BaseException]) -> ExceptionChainRepr:
-        repr_chain: list[tuple[ReprTraceback, ReprFileLocation | None, str | None]] = []
+        repr_chain = []
         e: BaseException | None = excinfo.value
         excinfo_: ExceptionInfo[BaseException] | None = excinfo
         description = None
@@ -1199,27 +1220,8 @@ class ExceptionInfoFormatter:
             seen.add(id(e))
 
             if excinfo_:
-                # Fall back to native traceback as a temporary workaround until
-                # full support for exception groups added to ExceptionInfo.
-                # See https://github.com/pytest-dev/pytest/issues/9159
-                reprtraceback: ReprTraceback | ReprTracebackNative
-                if isinstance(e, BaseExceptionGroup):
-                    # don't filter any sub-exceptions since they shouldn't have any internal frames
-                    traceback = filter_excinfo_traceback(self.tbfilter, excinfo)
-                    extraline = (
-                        "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
-                        if not traceback
-                        else None
-                    )
-                    reprtraceback = ReprTracebackNative(
-                        format_exception(
-                            type(excinfo.value),
-                            excinfo.value,
-                            traceback[0]._rawentry if traceback else None,
-                        ),
-                        extraline=extraline,
-                    )
-
+                if isinstance(excinfo_.value, BaseExceptionGroup):
+                    reprtraceback = self.repr_traceback_group(excinfo_)
                 else:
                     reprtraceback = self.repr_traceback(excinfo_)
                 reprcrash = excinfo_._getreprcrash()
@@ -1277,7 +1279,7 @@ class ExceptionRepr(TerminalRepr):
       this currently).
     """
 
-    reprtraceback: ReprTraceback
+    reprtraceback: ReprTraceback | ReprTracebackGroup
     reprcrash: ReprFileLocation | None
     sections: list[tuple[str, str, str]] = dataclasses.field(
         init=False, default_factory=list
@@ -1297,11 +1299,23 @@ class ExceptionChainRepr(ExceptionRepr):
     """A chain of exceptions, separated by descriptions (e.g. "The above
     exception was the direct cause of the following exception")."""
 
-    chain: Sequence[tuple[ReprTraceback, ReprFileLocation | None, str | None]]
+    chain: Sequence[
+        tuple[
+            ReprTraceback | ReprTracebackGroup,
+            ReprFileLocation | None,
+            str | None,
+        ]
+    ]
 
     def __init__(
         self,
-        chain: Sequence[tuple[ReprTraceback, ReprFileLocation | None, str | None]],
+        chain: Sequence[
+            tuple[
+                ReprTraceback | ReprTracebackGroup,
+                ReprFileLocation | None,
+                str | None,
+            ]
+        ],
     ) -> None:
         # reprcrash and reprtraceback of the outermost (the newest) exception
         # in the chain.
@@ -1370,6 +1384,24 @@ class ReprTracebackNative(ReprTraceback):
         self.reprentries = [ReprEntryNative(tblines)]
         self.extraline = extraline
         self.style = "native"
+
+
+@dataclasses.dataclass(eq=False)
+class ReprTracebackGroup(TerminalRepr):
+    """Tracebacks for an exception group.
+
+    Displays the traceback of the exception group itself, and of each exception
+    (or exception group) in the group.
+    """
+
+    reprtraceback: ReprTraceback
+    reprexceptions: Sequence[ReprTraceback | ReprTracebackGroup]
+
+    def toterminal(self, tw: TerminalWriter) -> None:
+        # TODO
+        self.reprtraceback.toterminal(tw)
+        for reprexception in self.reprexceptions:
+            reprexception.toterminal(tw)
 
 
 @dataclasses.dataclass(eq=False)
