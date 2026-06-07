@@ -1356,21 +1356,22 @@ class ReprTraceback(TerminalRepr):
 
     entrysep: ClassVar = "_ "
 
-    def toterminal(self, tw: TerminalWriter) -> None:
+    def toterminal(self, tw: TerminalWriter, *, indent: str = "") -> None:
         # The entries might have different styles.
         for i, entry in enumerate(self.reprentries):
             if entry.style == "long":
-                tw.line("")
-            entry.toterminal(tw)
+                tw.line(indent + "")
+            entry.toterminal(tw, indent=indent)
             if i < len(self.reprentries) - 1:
                 next_entry = self.reprentries[i + 1]
                 if entry.style == "long" or (
                     entry.style == "short" and next_entry.style == "long"
                 ):
-                    tw.sep(self.entrysep)
+                    tw.write(indent)
+                    tw.sep(self.entrysep, fullwidth=tw.fullwidth - len(indent))
 
         if self.extraline:
-            tw.line(self.extraline)
+            tw.line(indent + self.extraline)
 
 
 class ReprTracebackNative(ReprTraceback):
@@ -1397,11 +1398,12 @@ class ReprTracebackGroup(TerminalRepr):
     reprtraceback: ReprTraceback
     reprexceptions: Sequence[ReprTraceback | ReprTracebackGroup]
 
-    def toterminal(self, tw: TerminalWriter) -> None:
-        # TODO
-        self.reprtraceback.toterminal(tw)
+    def toterminal(self, tw: TerminalWriter, *, indent: str = "") -> None:
+        self.reprtraceback.toterminal(tw, indent=indent)
+        tw.line(indent + "+----")
         for reprexception in self.reprexceptions:
-            reprexception.toterminal(tw)
+            reprexception.toterminal(tw, indent=indent + "|" + " " * 3)
+            tw.line(indent + "+----")
 
 
 @dataclasses.dataclass(eq=False)
@@ -1419,8 +1421,9 @@ class ReprEntryNative(TerminalRepr):
 
     style: ClassVar[TracebackStyle] = "native"
 
-    def toterminal(self, tw: TerminalWriter) -> None:
-        tw.write("".join(self.lines))
+    def toterminal(self, tw: TerminalWriter, *, indent: str = "") -> None:
+        for line in self.lines:
+            tw.write(indent + line)
 
 
 @dataclasses.dataclass(eq=False)
@@ -1434,7 +1437,7 @@ class ReprEntry(TerminalRepr):
     reprfileloc: ReprFileLocation | None
     style: TracebackStyle
 
-    def _write_entry_lines(self, tw: TerminalWriter) -> None:
+    def _write_entry_lines(self, tw: TerminalWriter, *, indent: str = "") -> None:
         """Write the source code portions of a list of traceback entries with syntax highlighting.
 
         Usually entries are lines like these:
@@ -1455,14 +1458,14 @@ class ReprEntry(TerminalRepr):
             # lines written with TWMock.line and TWMock._write_source cannot be distinguished
             # from each other, whereas lines written with TWMock.write are marked with TWMock.WRITE
             for line in self.lines:
-                tw.write(line)
+                tw.write(indent + line)
                 tw.write("\n")
             return
 
         # separate indents and source lines that are not failures: we want to
         # highlight the code but not the indentation, which may contain markers
         # such as ">   assert 0"
-        fail_marker = f"{ExceptionInfoFormatter.fail_marker}   "
+        fail_marker = f"{indent}{ExceptionInfoFormatter.fail_marker}   "
         indent_size = len(fail_marker)
         indents: list[str] = []
         source_lines: list[str] = []
@@ -1474,36 +1477,36 @@ class ReprEntry(TerminalRepr):
                 failure_lines.extend(self.lines[index:])
                 break
             else:
-                indents.append(line[:indent_size])
+                indents.append(indent + line[:indent_size])
                 source_lines.append(line[indent_size:])
 
         tw._write_source(source_lines, indents)
 
         # failure lines are always completely red and bold
         for line in failure_lines:
-            tw.line(line, bold=True, red=True)
+            tw.line(indent + line, bold=True, red=True)
 
-    def toterminal(self, tw: TerminalWriter) -> None:
+    def toterminal(self, tw: TerminalWriter, *, indent: str = "") -> None:
         if self.style == "short":
             if self.reprfileloc:
-                self.reprfileloc.toterminal(tw)
-            self._write_entry_lines(tw)
+                self.reprfileloc.toterminal(tw, indent=indent)
+            self._write_entry_lines(tw, indent=indent)
             if self.reprlocals:
-                self.reprlocals.toterminal(tw, indent=" " * 8)
+                self.reprlocals.toterminal(tw, indent=indent + " " * 8)
             return
 
         if self.reprfuncargs:
-            self.reprfuncargs.toterminal(tw)
+            self.reprfuncargs.toterminal(tw, indent=indent)
 
-        self._write_entry_lines(tw)
+        self._write_entry_lines(tw, indent=indent)
 
         if self.reprlocals:
-            tw.line("")
-            self.reprlocals.toterminal(tw)
+            tw.line(indent)
+            self.reprlocals.toterminal(tw, indent=indent)
         if self.reprfileloc:
             if self.lines:
-                tw.line("")
-            self.reprfileloc.toterminal(tw)
+                tw.line(indent)
+            self.reprfileloc.toterminal(tw, indent=indent)
 
     def __str__(self) -> str:
         return "{}\n{}\n{}".format(
@@ -1526,11 +1529,12 @@ class ReprFileLocation(TerminalRepr):
     def __post_init__(self) -> None:
         self.path = str(self.path)
 
-    def toterminal(self, tw: TerminalWriter) -> None:
+    def toterminal(self, tw: TerminalWriter, *, indent: str = "") -> None:
         msg = self.message
         i = msg.find("\n")
         if i != -1:
             msg = msg[:i]
+        tw.write(indent)
         tw.write(self.path, bold=True, red=True)
         tw.line(f":{self.lineno}: {msg}")
 
@@ -1552,7 +1556,7 @@ class ReprFuncArgs(TerminalRepr):
 
     args: Sequence[tuple[str, object]]
 
-    def toterminal(self, tw: TerminalWriter) -> None:
+    def toterminal(self, tw: TerminalWriter, *, indent: str = "") -> None:
         if self.args:
             linesofar = ""
             for name, value in self.args:
@@ -1567,8 +1571,8 @@ class ReprFuncArgs(TerminalRepr):
                     else:
                         linesofar = ns
             if linesofar:
-                tw.line(linesofar)
-            tw.line("")
+                tw.line(indent + linesofar)
+            tw.line(indent)
 
 
 def getfslineno(obj: object) -> tuple[str | Path, int]:
